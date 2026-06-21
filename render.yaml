@@ -1,0 +1,10 @@
+# Configuración de despliegue para Render (https://render.com)
+# Con esto, Render detecta todo solo al conectar el repo (Blueprint).
+services:
+  - type: web
+    name: la-raspa
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
