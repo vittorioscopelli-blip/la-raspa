@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>La Raspa 🃏</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ===================== INICIO ===================== -->
+  <section id="home" class="screen active">
+    <div class="home-card">
+      <h1>La Raspa <span class="suit-deco">🃏</span></h1>
+      <p class="tagline">Juego de cartas españolas con tus primos</p>
+
+      <label class="field-label">Tu nombre</label>
+      <input id="nameInput" type="text" maxlength="14" placeholder="Ej: Vitto" />
+
+      <label class="field-label">Elegí tu avatar</label>
+      <div id="avatarPicker" class="avatar-picker"></div>
+
+      <div class="home-actions">
+        <button id="createBtn" class="btn primary">Crear sala</button>
+        <div class="join-row">
+          <input id="codeInput" type="text" maxlength="6" placeholder="CÓDIGO" />
+          <button id="joinBtn" class="btn">Unirse</button>
+        </div>
+      </div>
+      <p id="homeError" class="error"></p>
+      <button id="rulesBtn" class="link-btn">¿Cómo se juega?</button>
+    </div>
+  </section>
+
+  <!-- ===================== SALA DE ESPERA ===================== -->
+  <section id="lobby" class="screen">
+    <div class="lobby-card">
+      <h2>Sala <span id="lobbyCode" class="code-badge"></span></h2>
+      <p class="hint">Compartí el código con tus primos para que se unan.</p>
+      <div id="lobbyPlayers" class="lobby-players"></div>
+      <button id="startBtn" class="btn primary" disabled>Empezar partida</button>
+      <p id="lobbyHint" class="hint"></p>
+      <button id="leaveBtn" class="link-btn">Salir</button>
+    </div>
+  </section>
+
+  <!-- ===================== MESA ===================== -->
+  <section id="game" class="screen">
+    <header class="topbar">
+      <div class="round-info">
+        <span id="roundLabel">Ronda</span>
+        <span id="trumpInfo" class="trump-info"></span>
+      </div>
+      <div class="topbar-actions">
+        <div class="phrase-bar">
+          <button id="phraseToggle" class="btn small">💬 Frase</button>
+          <div id="phraseMenu" class="phrase-menu hidden"></div>
+        </div>
+        <div class="accuse-bar">
+          <button id="accuseToggle" class="btn small hidden">⚖️ Renunció</button>
+          <div id="accuseMenu" class="phrase-menu hidden"></div>
+        </div>
+        <button id="soundToggle" class="btn small" title="Sonido del turno">🔊</button>
+        <button id="scoreToggle" class="btn small">Puntajes</button>
+      </div>
+    </header>
+
+    <div class="table">
+      <div id="seats" class="seats"></div>
+
+      <div class="center">
+        <div class="muestra-zone">
+          <span class="muestra-label">Muestra</span>
+          <div id="muestraCard" class="card-slot"></div>
+        </div>
+        <div id="trick" class="trick"></div>
+        <div id="statusMsg" class="status-msg"></div>
+      </div>
+    </div>
+
+    <!-- Dock inferior: el panel de turno y la mano se apilan, nunca se tapan -->
+    <div class="bottom-dock">
+      <!-- Panel de apuestas -->
+      <div id="betPanel" class="action-panel hidden">
+        <p class="panel-title">¿Cuántas manos vas a hacer?</p>
+        <div id="betButtons" class="bet-buttons"></div>
+        <p id="betNote" class="panel-note"></p>
+      </div>
+
+      <!-- Panel fin de ronda -->
+      <div id="roundEndPanel" class="action-panel hidden">
+        <p class="panel-title">Fin de la ronda</p>
+        <div id="roundEndSummary"></div>
+        <p id="roundCountdown" class="countdown"></p>
+        <button id="nextRoundBtn" class="btn primary">Saltar a la siguiente ▶</button>
+        <p id="roundEndHint" class="hint"></p>
+      </div>
+
+      <!-- Mi mano -->
+      <div class="myhand-zone">
+        <div id="myHand" class="myhand"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FIN DE PARTIDA ===================== -->
+  <section id="gameover" class="screen">
+    <div class="lobby-card">
+      <h2 id="winnerTitle">🏆</h2>
+      <div id="finalScores" class="final-scores"></div>
+      <button id="playAgainBtn" class="btn primary">Jugar de nuevo</button>
+      <p id="gameoverHint" class="hint"></p>
+      <button id="leaveBtn2" class="link-btn">Salir</button>
+    </div>
+  </section>
+
+  <!-- ===================== PANEL DE PUNTAJES ===================== -->
+  <div id="scorePanel" class="overlay hidden">
+    <div class="overlay-card">
+      <h3>Puntajes</h3>
+      <div id="scoreContent"></div>
+      <button id="closeScore" class="btn">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- ===================== REGLAS ===================== -->
+  <div id="rulesPanel" class="overlay hidden">
+    <div class="overlay-card rules">
+      <h3>Cómo se juega La Raspa</h3>
+      <div class="rules-text">
+        <p><b>Reparto:</b> se juega con 40 cartas españolas (sin 8 ni 9). En cada ronda se reparten más cartas: 1 en la primera, 2 en la segunda, etc. El repartidor rota cada ronda. Al repartir se da vuelta una carta: la <b>muestra</b>, cuyo palo es el triunfo.</p>
+        <p><b>Apuestas:</b> cada uno dice cuántas manos cree que va a ganar. El repartidor apuesta último y no puede hacer que la suma total sea igual a la cantidad de cartas (alguien tiene que fallar).</p>
+        <p><b>Orden de las cartas:</b> 1 (la más fuerte), luego 3, Rey, Caballo, Sota, 7, 6, 5, 4, 2.</p>
+        <p><b>Triunfo:</b> el palo de la muestra le gana a cualquier otro palo.</p>
+        <p><b>Jugar:</b> hay que seguir el palo de salida. Si no tenés, tirás muestra. Si tenés una carta del palo (o muestra) que gana la mano, estás obligado a tirarla: no podés tirar una más baja para perder. Si la mano ya viene cortada y no tenés una muestra más grande, podés tirar cualquier carta.</p>
+        <p><b>Renunció:</b> se puede tirar cualquier carta aunque viole las reglas. Si te das cuenta de que alguien erró, tocá <b>Renunció</b> y elegí al jugador (una vez por ronda). Si acertás, ese jugador pierde 5 puntos y la mano se vuelve a jugar; si te equivocás, igual gastaste tu acusación.</p>
+        <p><b>Puntos:</b> cada mano ganada vale 1 punto. Si además cumplís tu apuesta exacta, sumás 5 puntos de bonus. Ej: apostaste 0 e hiciste 1 mano = 1 punto; apostaste 2 e hiciste 2 = 7. Gana quien más puntos suma al final.</p>
+      </div>
+      <button id="closeRules" class="btn">Entendido</button>
+    </div>
+  </div>
+
+  <!-- burbujas de frases -->
+  <div id="bubbleLayer"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
