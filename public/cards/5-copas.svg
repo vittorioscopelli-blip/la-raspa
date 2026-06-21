@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 210" width="150" height="210">
+  <rect x="2" y="2" width="146" height="206" rx="12" fill="#fffdf6" stroke="#c0392b" stroke-width="2.5"/>
+  <rect x="6" y="6" width="138" height="198" rx="9" fill="none" stroke="#c0392b" stroke-opacity="0.25" stroke-width="1"/>
+  <g transform="translate(20,26) rotate(0)">
+    <text text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="20" fill="#c0392b">5</text>
+    <g transform="translate(0,16) scale(0.55)"><g fill="#c0392b" stroke="#6d1f17" stroke-width="1"><path d="M-9,-12 H9 a9,9 0 0 1 -18,0 Z"/><rect x="-1.6" y="-2" width="3.2" height="9"/><rect x="-7" y="7" width="14" height="3.4" rx="1.5"/></g></g>
+  </g>
+  <g transform="translate(130,184) rotate(180)">
+    <text text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="20" fill="#c0392b">5</text>
+    <g transform="translate(0,16) scale(0.55)"><g fill="#c0392b" stroke="#6d1f17" stroke-width="1"><path d="M-9,-12 H9 a9,9 0 0 1 -18,0 Z"/><rect x="-1.6" y="-2" width="3.2" height="9"/><rect x="-7" y="7" width="14" height="3.4" rx="1.5"/></g></g>
+  </g>
+  <g transform="translate(75,105)"><g transform="translate(-18,-24)"><g fill="#c0392b" stroke="#6d1f17" stroke-width="1"><path d="M-9,-12 H9 a9,9 0 0 1 -18,0 Z"/><rect x="-1.6" y="-2" width="3.2" height="9"/><rect x="-7" y="7" width="14" height="3.4" rx="1.5"/></g></g><g transform="translate(18,-24)"><g fill="#c0392b" stroke="#6d1f17" stroke-width="1"><path d="M-9,-12 H9 a9,9 0 0 1 -18,0 Z"/><rect x="-1.6" y="-2" width="3.2" height="9"/><rect x="-7" y="7" width="14" height="3.4" rx="1.5"/></g></g><g transform="translate(0,0)"><g fill="#c0392b" stroke="#6d1f17" stroke-width="1"><path d="M-9,-12 H9 a9,9 0 0 1 -18,0 Z"/><rect x="-1.6" y="-2" width="3.2" height="9"/><rect x="-7" y="7" width="14" height="3.4" rx="1.5"/></g></g><g transform="translate(-18,24)"><g fill="#c0392b" stroke="#6d1f17" stroke-width="1"><path d="M-9,-12 H9 a9,9 0 0 1 -18,0 Z"/><rect x="-1.6" y="-2" width="3.2" height="9"/><rect x="-7" y="7" width="14" height="3.4" rx="1.5"/></g></g><g transform="translate(18,24)"><g fill="#c0392b" stroke="#6d1f17" stroke-width="1"><path d="M-9,-12 H9 a9,9 0 0 1 -18,0 Z"/><rect x="-1.6" y="-2" width="3.2" height="9"/><rect x="-7" y="7" width="14" height="3.4" rx="1.5"/></g></g></g>
+</svg>
