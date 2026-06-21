@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 210" width="150" height="210">
+  <rect x="2" y="2" width="146" height="206" rx="12" fill="#fffdf6" stroke="#27408b" stroke-width="2.5"/>
+  <rect x="6" y="6" width="138" height="198" rx="9" fill="none" stroke="#27408b" stroke-opacity="0.25" stroke-width="1"/>
+  <g transform="translate(20,26) rotate(0)">
+    <text text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="20" fill="#27408b">REY</text>
+    <g transform="translate(0,16) scale(0.55)"><g stroke="#1c2d63" stroke-width="1" fill="#27408b"><path d="M0,-14 L3,-2 L-3,-2 Z"/><rect x="-1.4" y="-3" width="2.8" height="13"/><rect x="-7" y="-3.5" width="14" height="3" rx="1.4"/><circle cy="11" r="2.4"/></g></g>
+  </g>
+  <g transform="translate(130,184) rotate(180)">
+    <text text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="20" fill="#27408b">REY</text>
+    <g transform="translate(0,16) scale(0.55)"><g stroke="#1c2d63" stroke-width="1" fill="#27408b"><path d="M0,-14 L3,-2 L-3,-2 Z"/><rect x="-1.4" y="-3" width="2.8" height="13"/><rect x="-7" y="-3.5" width="14" height="3" rx="1.4"/><circle cy="11" r="2.4"/></g></g>
+  </g>
+  
+    <g transform="translate(75,108)">
+      <rect x="-40" y="-58" width="80" height="116" rx="8" fill="#fff" stroke="#27408b" stroke-width="2.5"/>
+      <g transform="translate(0,-18) scale(2.1)"><g stroke="#1c2d63" stroke-width="1" fill="#27408b"><path d="M0,-14 L3,-2 L-3,-2 Z"/><rect x="-1.4" y="-3" width="2.8" height="13"/><rect x="-7" y="-3.5" width="14" height="3" rx="1.4"/><circle cy="11" r="2.4"/></g></g>
+      <text x="0" y="40" text-anchor="middle" font-family="Georgia, serif" font-size="20" font-weight="bold" fill="#27408b">REY</text>
+    </g>
+</svg>

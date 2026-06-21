@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 210" width="150" height="210">
+  <rect x="2" y="2" width="146" height="206" rx="12" fill="#fffdf6" stroke="#c8901a" stroke-width="2.5"/>
+  <rect x="6" y="6" width="138" height="198" rx="9" fill="none" stroke="#c8901a" stroke-opacity="0.25" stroke-width="1"/>
+  <g transform="translate(20,26) rotate(0)">
+    <text text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="20" fill="#c8901a">AS</text>
+    <g transform="translate(0,16) scale(0.55)"><g><circle r="13" fill="#c8901a" stroke="#7a5a10" stroke-width="1.5"/><circle r="8.5" fill="none" stroke="#fff6da" stroke-width="1.5"/><circle r="3" fill="#fff6da"/></g></g>
+  </g>
+  <g transform="translate(130,184) rotate(180)">
+    <text text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="20" fill="#c8901a">AS</text>
+    <g transform="translate(0,16) scale(0.55)"><g><circle r="13" fill="#c8901a" stroke="#7a5a10" stroke-width="1.5"/><circle r="8.5" fill="none" stroke="#fff6da" stroke-width="1.5"/><circle r="3" fill="#fff6da"/></g></g>
+  </g>
+  <g transform="translate(75,105)"><g transform="translate(0,0)"><g><circle r="13" fill="#c8901a" stroke="#7a5a10" stroke-width="1.5"/><circle r="8.5" fill="none" stroke="#fff6da" stroke-width="1.5"/><circle r="3" fill="#fff6da"/></g></g></g>
+</svg>
