@@ -37,10 +37,13 @@ function maxCardsPerRound(numPlayers) {
   return Math.max(1, Math.min(7, Math.floor((40 - 1) / numPlayers)));
 }
 
-function roundsPlan(numPlayers) {
+// Plan de rondas: 1, 2, ..., max. Con "ida y vuelta" sigue bajando:
+// 1, 2, ..., max, max-1, ..., 2, 1 (elección del anfitrión).
+function roundsPlan(numPlayers, idaYVuelta = false) {
   const max = maxCardsPerRound(numPlayers);
   const plan = [];
   for (let i = 1; i <= max; i++) plan.push(i);
+  if (idaYVuelta) for (let i = max - 1; i >= 1; i--) plan.push(i);
   return plan;
 }
 

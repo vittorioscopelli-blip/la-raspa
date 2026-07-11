@@ -52,6 +52,9 @@ class Game {
     this.winnerIds = [];
     this.accusedThisRound = {}; // playerId -> true (una acusación de renuncio por ronda)
     this.lastAccusation = null; // { accuserName, accusedName, correct, ts }
+    this.roundTricks = [];      // historial de manos de ESTA ronda: { plays, winnerId, leaderIndex }
+    this.trickPause = false;    // pausa de 2s al resolver cada mano (nadie puede jugar)
+    this.options = { idaYVuelta: false }; // el anfitrión puede elegir jugar 1..7..1
   }
 
   // -------- Jugadores --------
@@ -64,17 +67,18 @@ class Game {
     return this.players.find((p) => p.id === id);
   }
 
-  addPlayer({ id, name, avatar }) {
+  addPlayer({ id, name, avatar, skin }) {
     const existing = this.getPlayer(id);
     if (existing) {
       existing.connected = true;
       if (name) existing.name = name;
       if (avatar) existing.avatar = avatar;
+      if (skin) existing.skin = skin;
       return { ok: true };
     }
     if (this.phase !== PHASES.LOBBY) return { ok: false, error: 'La partida ya empezó.' };
     if (this.players.length >= MAX_PLAYERS) return { ok: false, error: 'La sala está llena (máx. 10).' };
-    this.players.push({ id, name, avatar, connected: true });
+    this.players.push({ id, name, avatar, skin: skin || 's1', connected: true });
     if (!this.hostId) this.hostId = id;
     if (this.scores[id] === undefined) this.scores[id] = 0;
     return { ok: true };
@@ -96,6 +100,23 @@ class Game {
     }
   }
 
+  // -------- Opciones (en el lobby) --------
+
+  setOptions(byId, opts) {
+    if (byId !== this.hostId) return { ok: false, error: 'Sólo el anfitrión cambia las opciones.' };
+    if (this.phase !== PHASES.LOBBY) return { ok: false, error: 'Sólo se puede cambiar en la sala de espera.' };
+    if (opts && typeof opts.idaYVuelta === 'boolean') this.options.idaYVuelta = opts.idaYVuelta;
+    return { ok: true };
+  }
+
+  // Índice de la ronda "pico" (la de más cartas). Con ida y vuelta, al
+  // terminarla se muestra el resultado parcial.
+  get peakRoundIndex() {
+    if (!this.roundsPlan.length) return -1;
+    const max = Math.max(...this.roundsPlan);
+    return this.roundsPlan.indexOf(max);
+  }
+
   // -------- Inicio de partida --------
 
   start(byId) {
@@ -103,7 +124,7 @@ class Game {
     if (this.players.length < 2) return { ok: false, error: 'Hacen falta al menos 2 jugadores.' };
     if (this.phase !== PHASES.LOBBY) return { ok: false, error: 'La partida ya empezó.' };
 
-    this.roundsPlan = E.roundsPlan(this.players.length);
+    this.roundsPlan = E.roundsPlan(this.players.length, this.options.idaYVuelta);
     this.roundIndex = 0;
     this.dealerIndex = Math.floor(Math.random() * this.players.length); // repartidor al azar
     this.players.forEach((p) => (this.scores[p.id] = 0));
@@ -122,6 +143,8 @@ class Game {
     ids.forEach((id) => (this.tricksWon[id] = 0));
     this.currentTrick = [];
     this.lastTrick = null;
+    this.roundTricks = [];
+    this.trickPause = false;
     this.accusedThisRound = {};
     this.lastAccusation = null;
 
@@ -140,6 +163,7 @@ class Game {
       return this.order[idx];
     }
     if (this.phase === PHASES.PLAYING) {
+      if (this.trickPause) return null; // pausa: se está mostrando quién ganó la mano
       const idx = this.playSeq[this.playPos];
       return this.order[idx];
     }
@@ -184,6 +208,7 @@ class Game {
 
   playCard(playerId, card) {
     if (this.phase !== PHASES.PLAYING) return { ok: false, error: 'No es momento de jugar.' };
+    if (this.trickPause) return { ok: false, error: 'Esperá, se está mostrando quién ganó la mano.' };
     if (this.currentTurnId() !== playerId) return { ok: false, error: 'No es tu turno.' };
 
     const hand = this.hands[playerId] || [];
@@ -212,18 +237,31 @@ class Game {
       winnerId,
       leaderIndex: this.trickLeaderIndex,
     };
+    this.roundTricks.push(this.lastTrick);
     this.currentTrick = [];
+
+    // Pausa de 2s: la mesa muestra la carta ganadora resaltada y nadie puede
+    // jugar. El servidor llama a finishTrick() cuando pasa el tiempo.
+    this.trickPause = true;
+  }
+
+  // Cierra la pausa de fin de mano: pasa a la siguiente mano o termina la ronda.
+  finishTrick() {
+    if (!this.trickPause) return { ok: false };
+    this.trickPause = false;
+    const winnerId = this.lastTrick ? this.lastTrick.winnerId : null;
 
     // ¿Quedan cartas?
     const anyCardsLeft = this.order.some((id) => (this.hands[id] || []).length > 0);
     if (!anyCardsLeft) {
       this.endRound();
-      return;
+      return { ok: true };
     }
     // La próxima mano la abre quien ganó.
     this.trickLeaderIndex = this.order.indexOf(winnerId);
     this.playSeq = rotationFrom(this.trickLeaderIndex, this.players.length);
     this.playPos = 0;
+    return { ok: true };
   }
 
   endRound() {
@@ -242,6 +280,10 @@ class Game {
       dealerId: this.order[this.dealerIndex],
       results,
     });
+
+    // Con ida y vuelta, al terminar la ronda más grande (fin de la "ida")
+    // se muestra el resultado parcial.
+    this.halfwayJustEnded = this.options.idaYVuelta && this.roundIndex === this.peakRoundIndex;
 
     if (this.roundIndex + 1 >= this.roundsPlan.length) {
       this.phase = PHASES.GAME_OVER;
@@ -270,7 +312,7 @@ class Game {
   playAgain(byId) {
     if (byId !== this.hostId) return { ok: false, error: 'Sólo el anfitrión reinicia.' };
     if (this.phase !== PHASES.GAME_OVER) return { ok: false, error: 'La partida no terminó.' };
-    this.roundsPlan = E.roundsPlan(this.players.length);
+    this.roundsPlan = E.roundsPlan(this.players.length, this.options.idaYVuelta);
     this.roundIndex = 0;
     this.dealerIndex = Math.floor(Math.random() * this.players.length);
     this.players.forEach((p) => (this.scores[p.id] = 0));
@@ -294,37 +336,57 @@ class Game {
     if (!this.getPlayer(accusedId)) return { ok: false, error: 'Ese jugador no existe.' };
     if (accuserId === accusedId) return { ok: false, error: 'No podés acusarte a vos mismo.' };
     if (this.accusedThisRound[accuserId]) return { ok: false, error: 'Ya usaste tu acusación esta ronda.' };
-
-    // La "mano en cuestión": la que se está jugando, o la última si ya se resolvió
-    // y todavía no se jugó ninguna carta de la siguiente.
-    let plays, leaderIndex, fromLast;
-    if (this.currentTrick.length > 0) {
-      plays = this.currentTrick; leaderIndex = this.trickLeaderIndex; fromLast = false;
-    } else if (this.lastTrick) {
-      plays = this.lastTrick.plays; leaderIndex = this.lastTrick.leaderIndex; fromLast = true;
-    } else {
-      return { ok: false, error: 'No hay ninguna mano para revisar todavía.' };
+    if (!this.roundTricks.length && !this.currentTrick.length) {
+      return { ok: false, error: 'No hay ninguna jugada para revisar todavía.' };
     }
 
     this.accusedThisRound[accuserId] = true; // se consume, haya acertado o no
     const accuserName = this.getPlayer(accuserId).name;
     const accusedName = this.getPlayer(accusedId).name;
-    const offended = plays.some((p) => p.playerId === accusedId && p.legal === false);
 
-    if (!offended) {
+    // La acusación revisa TODAS las jugadas hechas hasta este momento en la
+    // ronda (manos ya resueltas + la mano en curso). Buscamos la PRIMERA
+    // infracción del acusado.
+    let badTrickIdx = -1; // índice en roundTricks
+    for (let k = 0; k < this.roundTricks.length; k++) {
+      if (this.roundTricks[k].plays.some((p) => p.playerId === accusedId && p.legal === false)) {
+        badTrickIdx = k;
+        break;
+      }
+    }
+    const badInCurrent = badTrickIdx === -1 &&
+      this.currentTrick.some((p) => p.playerId === accusedId && p.legal === false);
+
+    if (badTrickIdx === -1 && !badInCurrent) {
       this.lastAccusation = { accuserName, accusedName, correct: false, ts: Date.now() };
       return { ok: true };
     }
 
-    // Acusación correcta: -5 al infractor y se repite la mano.
+    // Acusación correcta: -5 al infractor y se repite desde la mano de la
+    // infracción (las manos posteriores de esta ronda quedan anuladas).
     this.scores[accusedId] = (this.scores[accusedId] || 0) - 5;
-    this._returnCardsToHands(plays);
-    if (fromLast) {
-      const w = this.lastTrick.winnerId;
-      this.tricksWon[w] = Math.max(0, (this.tricksWon[w] || 0) - 1);
+
+    let leaderIndex;
+    if (badInCurrent) {
+      // La infracción está en la mano en curso: se devuelven esas cartas.
+      this._returnCardsToHands(this.currentTrick);
+      leaderIndex = this.trickLeaderIndex;
+    } else {
+      // Se anulan la mano infractora y todas las posteriores (manos ganadas
+      // incluidas), y también la mano en curso.
+      for (let j = badTrickIdx; j < this.roundTricks.length; j++) {
+        const t = this.roundTricks[j];
+        this.tricksWon[t.winnerId] = Math.max(0, (this.tricksWon[t.winnerId] || 0) - 1);
+        this._returnCardsToHands(t.plays);
+      }
+      this._returnCardsToHands(this.currentTrick);
+      leaderIndex = this.roundTricks[badTrickIdx].leaderIndex;
+      this.roundTricks = this.roundTricks.slice(0, badTrickIdx);
     }
+
     this.currentTrick = [];
-    this.lastTrick = null;
+    this.lastTrick = this.roundTricks.length ? this.roundTricks[this.roundTricks.length - 1] : null;
+    this.trickPause = false; // si había pausa de fin de mano, se corta
     this.trickLeaderIndex = leaderIndex;
     this.playSeq = rotationFrom(leaderIndex, this.players.length);
     this.playPos = 0;
@@ -357,6 +419,7 @@ class Game {
         id: p.id,
         name: p.name,
         avatar: p.avatar,
+        skin: p.skin || 's1',
         connected: p.connected,
         seat: i,
         isDealer: i === this.dealerIndex && this.phase !== PHASES.LOBBY,
@@ -370,6 +433,9 @@ class Game {
       roundIndex: this.roundIndex,
       totalRounds: this.roundsPlan.length,
       cardsThisRound: this.cardsThisRound,
+      options: this.options,
+      trickPause: this.trickPause,
+      isHalfway: this.phase === PHASES.ROUND_END && !!this.halfwayJustEnded,
       muestra: this.muestra,
       trumpSuit: this.trumpSuit,
       currentTrick: this.currentTrick.map((p) => ({ playerId: p.playerId, card: p.card })),
