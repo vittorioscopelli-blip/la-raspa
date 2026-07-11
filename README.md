@@ -48,14 +48,15 @@ Funciona igual: cualquier hosting que corra Node.js. El servidor usa la variable
 - **Orden de cartas:** 1 (la más fuerte) > 3 > Rey > Caballo > Sota > 7 > 6 > 5 > 4 > 2.
 - **Triunfo:** el palo de la muestra le gana a cualquier otro.
 - **Jugar:** hay que seguir el palo de salida; si no tenés, tirás muestra. Si tenés una carta del palo (o muestra) que **gana** la mano, estás obligado a tirarla (no podés tirar una más baja). Si no podés ganar, tirás cualquiera.
-- **Renunció:** se puede tirar cualquier carta aunque viole las reglas. Si notás que alguien erró, tocá **Renunció** y elegí al jugador (una vez por ronda): si acertás, pierde 5 puntos y la mano se vuelve a jugar; si te equivocás, igual gastaste tu acusación.
+- **Renunció:** se puede tirar cualquier carta aunque viole las reglas. Renuncia quien: no sigue el palo de salida teniendo; tira una carta menor a la más alta del palo pudiendo superarla (salvo que la mano ya venga cortada con muestra); corta con muestra teniendo el palo de salida; o, sin tener el palo, no corta con muestra pudiendo (o corta con una menor a la ya jugada). Si notás que alguien erró, tocá **Renunció** y elegí al jugador (una vez por ronda). La acusación revisa **todas las jugadas de la ronda** hasta ese momento: si acertás, el infractor pierde 5 puntos y la ronda se repite desde la mano de la infracción (las manos posteriores se anulan); si te equivocás, igual gastaste tu acusación.
+- **Ida y vuelta (opcional):** el anfitrión puede activar en la sala de espera que, al llegar a la ronda más grande (7 cartas), se siga bajando: 7, 6, 5... hasta 1. Al terminar la ronda de 7 se muestra el resultado parcial.
 - **Puntos:** cada mano ganada vale 1 punto siempre. Si además cumplís tu apuesta exacta, sumás 5 puntos de bonus (ej: apostaste 0 e hiciste 1 = 1 punto; apostaste 2 e hiciste 2 = 7). Gana quien más suma.
 
 ## Personalización
 
 - **Frases graciosas:** editá `public/phrases.json` (la lista `"frases"`). Agregá las que quieras; aparecen en el menú 💬 durante la partida.
-- **Imágenes de las cartas:** están en `public/cards/` como `RANGO-PALO.svg` (ej. `1-oros.svg`, `12-espadas.svg`) más `back.svg`. Podés reemplazarlas por tus propias imágenes manteniendo los nombres (sirven `.svg`, o cambiá la extensión a `.png`/`.jpg` ajustando `cardSrc()` en `public/client.js`).
-- **Avatares:** en `public/avatars/` (`a01.svg` … `a12.svg`). Reemplazables igual que las cartas.
+- **Imágenes de las cartas:** están en `public/cards/` como `RANGO-PALO.png` (ej. `1-oros.png`, `12-espadas.png`) más `back.png`. Son la baraja española libre de [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Baraja_espa%C3%B1ola_completa.png) (obra de Basquetteur y otros, licencia [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)). Podés reemplazarlas por tus propias imágenes manteniendo los nombres (ajustando `cardSrc()` en `public/client.js` si cambiás la extensión).
+- **Avatares:** en `public/avatars/` (`a01.svg` … `a12.svg`). Reemplazables igual que las cartas. Cada jugador elige además su color de piel en la pantalla de inicio.
 
 ## Estructura del proyecto
 

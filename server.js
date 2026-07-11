@@ -23,6 +23,10 @@ const PORT = process.env.PORT || 3000;
 const AUTO_ADVANCE_MS = 7000;
 const roundTimers = new Map(); // code -> timeout
 
+// Pausa al final de cada mano: la carta ganadora queda marcada 2 segundos.
+const TRICK_PAUSE_MS = 2000;
+const trickTimers = new Map(); // code -> timeout
+
 // --- Límites de seguridad ---
 const MAX_ROOMS = 1000;            // tope de salas simultáneas (anti-abuso de memoria)
 const ROOM_EXPIRY_MS = 30 * 60 * 1000; // borra salas sin nadie conectado tras 30 min
@@ -35,6 +39,10 @@ function cleanName(n) {
 }
 function cleanAvatar(a) {
   return ALLOWED_AVATARS.includes(a) ? a : 'a01';
+}
+const ALLOWED_SKINS = ['s1','s2','s3','s4','s5','s6'];
+function cleanSkin(s) {
+  return ALLOWED_SKINS.includes(s) ? s : 's1';
 }
 
 // code -> Game
@@ -84,6 +92,23 @@ function scheduleAutoAdvance(code) {
   roundTimers.set(code, t);
 }
 
+// Al terminar cada mano hay una pausa de 2s con la carta ganadora marcada;
+// pasado ese tiempo el servidor cierra la mano (o la ronda) solo.
+function scheduleTrickFinish(code) {
+  const game = rooms.get(code);
+  if (!game || !game.trickPause || trickTimers.has(code)) return;
+  const t = setTimeout(() => {
+    trickTimers.delete(code);
+    const g = rooms.get(code);
+    if (g && g.trickPause) {
+      g.finishTrick();
+      broadcast(code);
+      scheduleAutoAdvance(code); // por si la ronda terminó
+    }
+  }, TRICK_PAUSE_MS);
+  trickTimers.set(code, t);
+}
+
 function cleanupRoomIfEmpty(code) {
   const game = rooms.get(code);
   if (!game) return;
@@ -109,13 +134,13 @@ io.on('connection', (socket) => {
   }
 
   // Crear sala
-  socket.on('create', ({ name, avatar, playerId }, cb) => {
+  socket.on('create', ({ name, avatar, skin, playerId }, cb) => {
     if (rooms.size >= MAX_ROOMS) return cb && cb({ ok: false, error: 'Servidor lleno, probá más tarde.' });
-    name = cleanName(name); avatar = cleanAvatar(avatar);
+    name = cleanName(name); avatar = cleanAvatar(avatar); skin = cleanSkin(skin);
     const code = makeCode();
     const game = new Game(code);
     rooms.set(code, game);
-    const res = game.addPlayer({ id: playerId, name, avatar });
+    const res = game.addPlayer({ id: playerId, name, avatar, skin });
     if (!res.ok) return cb && cb(res);
     joinRoom(code, playerId);
     cb && cb({ ok: true, code });
@@ -123,12 +148,12 @@ io.on('connection', (socket) => {
   });
 
   // Unirse a sala
-  socket.on('join', ({ code, name, avatar, playerId }, cb) => {
+  socket.on('join', ({ code, name, avatar, skin, playerId }, cb) => {
     code = (code || '').toUpperCase().trim();
-    name = cleanName(name); avatar = cleanAvatar(avatar);
+    name = cleanName(name); avatar = cleanAvatar(avatar); skin = cleanSkin(skin);
     const game = rooms.get(code);
     if (!game) return cb && cb({ ok: false, error: 'No existe una sala con ese código.' });
-    const res = game.addPlayer({ id: playerId, name, avatar });
+    const res = game.addPlayer({ id: playerId, name, avatar, skin });
     if (!res.ok) return cb && cb(res);
     joinRoom(code, playerId);
     cb && cb({ ok: true, code });
@@ -158,9 +183,11 @@ io.on('connection', (socket) => {
     cb && cb({ ok: true });
     broadcast(info.code);
     scheduleAutoAdvance(info.code);
+    scheduleTrickFinish(info.code);
   }
 
   socket.on('start', (_, cb) => withGame(cb, (g, i) => g.start(i.playerId)));
+  socket.on('setOptions', (opts, cb) => withGame(cb, (g, i) => g.setOptions(i.playerId, opts || {})));
   socket.on('bet', ({ bet }, cb) => withGame(cb, (g, i) => g.placeBet(i.playerId, bet)));
   socket.on('play', ({ card }, cb) => withGame(cb, (g, i) => g.playCard(i.playerId, card)));
   socket.on('nextRound', (_, cb) => withGame(cb, (g, i) => g.nextRound(i.playerId)));
@@ -217,6 +244,8 @@ setInterval(() => {
     if (!game.emptySince) game.emptySince = now;
     else if (now - game.emptySince > ROOM_EXPIRY_MS) {
       clearAutoAdvance(code);
+      const tt = trickTimers.get(code);
+      if (tt) { clearTimeout(tt); trickTimers.delete(code); }
       rooms.delete(code);
     }
   }
