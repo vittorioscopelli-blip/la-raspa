@@ -15,6 +15,10 @@ const PHASES = {
 
 const MAX_PLAYERS = 10;
 
+// Si un jugador demora más de esto en su turno, los demás pueden votar
+// (por unanimidad) que una IA básica juegue por él y quede expulsado.
+const SLOW_TURN_MS = 20 * 1000;
+
 function rotationFrom(leaderIndex, n) {
   const arr = [];
   for (let i = 0; i < n; i++) arr.push((leaderIndex + i) % n);
@@ -55,6 +59,14 @@ class Game {
     this.roundTricks = [];      // historial de manos de ESTA ronda: { plays, winnerId, leaderIndex }
     this.trickPause = false;    // pausa de 2s al resolver cada mano (nadie puede jugar)
     this.options = { idaYVuelta: false }; // el anfitrión puede elegir jugar 1..7..1
+    this.turnStartedAt = null;  // para detectar jugadores que demoran
+    this.replaceVote = null;    // { targetId, votes: {playerId: bool}, startedAt }
+    this.lastVoteResult = null; // { targetName, success, ts }
+  }
+
+  // El turno cambió: se reinicia el reloj de demora.
+  _touchTurn() {
+    this.turnStartedAt = Date.now();
   }
 
   // -------- Jugadores --------
@@ -70,6 +82,7 @@ class Game {
   addPlayer({ id, name, avatar, skin }) {
     const existing = this.getPlayer(id);
     if (existing) {
+      if (existing.isBot) return { ok: false, error: 'Ya no estás en esta partida (te reemplazó la IA).' };
       existing.connected = true;
       if (name) existing.name = name;
       if (avatar) existing.avatar = avatar;
@@ -151,6 +164,8 @@ class Game {
     this.bettingSeq = E.bettingOrder(ids, this.dealerIndex);
     this.bettingPos = 0;
     this.phase = PHASES.BETTING;
+    this.replaceVote = null;
+    this._touchTurn();
   }
 
   get trumpSuit() {
@@ -181,8 +196,11 @@ class Game {
     if (!E.isValidBet(bet, this.cardsThisRound, sumOthers, isDealer)) {
       return { ok: false, error: 'Apuesta inválida.' };
     }
+    // Si estaban votando reemplazarlo por demora y respondió, se cancela la votación.
+    this.cancelVoteFor(playerId);
     this.bets[playerId] = bet;
     this.bettingPos++;
+    this._touchTurn();
 
     if (this.bettingPos >= this.bettingSeq.length) {
       // Todos apostaron: arranca el juego, mano = jugador a la derecha del repartidor.
@@ -218,9 +236,12 @@ class Game {
 
     const idx = hand.findIndex((c) => c.suit === card.suit && c.rank === card.rank);
     if (idx === -1) return { ok: false, error: 'No tenés esa carta.' };
+    // Si estaban votando reemplazarlo por demora y respondió, se cancela la votación.
+    this.cancelVoteFor(playerId);
     const played = hand.splice(idx, 1)[0];
     this.currentTrick.push({ playerId, card: played, legal });
     this.playPos++;
+    this._touchTurn();
 
     if (this.currentTrick.length >= this.players.length) {
       this.resolveTrick();
@@ -261,6 +282,7 @@ class Game {
     this.trickLeaderIndex = this.order.indexOf(winnerId);
     this.playSeq = rotationFrom(this.trickLeaderIndex, this.players.length);
     this.playPos = 0;
+    this._touchTurn();
     return { ok: true };
   }
 
@@ -391,8 +413,149 @@ class Game {
     this.playSeq = rotationFrom(leaderIndex, this.players.length);
     this.playPos = 0;
     this.phase = PHASES.PLAYING;
+    this._touchTurn();
     this.lastAccusation = { accuserName, accusedName, correct: true, ts: Date.now() };
     return { ok: true };
+  }
+
+  // -------- Jugadores lentos: votación de reemplazo por IA --------
+
+  // Jugadores habilitados a votar: todos menos el acusado, los bots y los desconectados.
+  eligibleVoters(targetId) {
+    return this.players
+      .filter((p) => p.id !== targetId && !p.isBot && p.connected)
+      .map((p) => p.id);
+  }
+
+  turnElapsedMs() {
+    return this.turnStartedAt ? Date.now() - this.turnStartedAt : 0;
+  }
+
+  startReplaceVote(byId, targetId) {
+    if (this.phase !== PHASES.BETTING && this.phase !== PHASES.PLAYING) {
+      return { ok: false, error: 'No es momento de votar.' };
+    }
+    if (this.replaceVote) return { ok: false, error: 'Ya hay una votación en curso.' };
+    const target = this.getPlayer(targetId);
+    const voter = this.getPlayer(byId);
+    if (!target || target.isBot) return { ok: false, error: 'Ese jugador no se puede reemplazar.' };
+    if (!voter || voter.isBot) return { ok: false, error: 'No podés iniciar la votación.' };
+    if (byId === targetId) return { ok: false, error: 'No podés votarte a vos mismo.' };
+    if (this.currentTurnId() !== targetId) return { ok: false, error: 'Sólo se puede votar al jugador que está demorando su turno.' };
+    if (this.turnElapsedMs() < SLOW_TURN_MS) return { ok: false, error: 'Todavía no pasaron los 20 segundos.' };
+    this.replaceVote = { targetId, votes: { [byId]: true }, startedAt: Date.now() };
+    return this._checkVote();
+  }
+
+  voteReplace(byId, yes) {
+    if (!this.replaceVote) return { ok: false, error: 'No hay ninguna votación en curso.' };
+    const voter = this.getPlayer(byId);
+    if (!voter || voter.isBot) return { ok: false, error: 'No podés votar.' };
+    if (byId === this.replaceVote.targetId) return { ok: false, error: 'El acusado no vota.' };
+    this.replaceVote.votes[byId] = !!yes;
+    return this._checkVote();
+  }
+
+  // Evalúa la votación: UN voto en contra la cancela; se aprueba sólo si
+  // TODOS los habilitados votaron que sí (unanimidad).
+  _checkVote() {
+    const rv = this.replaceVote;
+    if (!rv) return { ok: true };
+    const target = this.getPlayer(rv.targetId);
+    const targetName = target ? target.name : '?';
+    if (Object.values(rv.votes).some((v) => v === false)) {
+      this.replaceVote = null;
+      this.lastVoteResult = { targetName, success: false, ts: Date.now() };
+      return { ok: true };
+    }
+    const voters = this.eligibleVoters(rv.targetId);
+    const allYes = voters.length > 0 && voters.every((id) => rv.votes[id] === true);
+    if (allYes) {
+      this._makeBot(rv.targetId);
+      this.replaceVote = null;
+      this.lastVoteResult = { targetName, success: true, ts: Date.now() };
+    }
+    return { ok: true };
+  }
+
+  cancelVoteFor(playerId) {
+    if (this.replaceVote && this.replaceVote.targetId === playerId) this.replaceVote = null;
+  }
+
+  // Convierte a un jugador en bot (IA básica): queda fuera de la partida
+  // pero sus cartas las sigue jugando el servidor.
+  _makeBot(playerId) {
+    const p = this.getPlayer(playerId);
+    if (!p) return;
+    p.isBot = true;
+    p.connected = false;
+    if (this.hostId === playerId) {
+      const h = this.players.find((q) => !q.isBot);
+      this.hostId = h ? h.id : null;
+    }
+    if (this.replaceVote) {
+      // Si era el acusado, la votación muere; si era un votante, se recuenta.
+      if (this.replaceVote.targetId === playerId) this.replaceVote = null;
+      else { delete this.replaceVote.votes[playerId]; this._checkVote(); }
+    }
+  }
+
+  // -------- Abandono voluntario --------
+
+  abandon(playerId) {
+    const p = this.getPlayer(playerId);
+    if (!p) return { ok: false, error: 'No estás en la partida.' };
+    if (this.phase === PHASES.LOBBY || this.phase === PHASES.GAME_OVER) {
+      // Sin partida en curso: se lo quita del todo.
+      this.players = this.players.filter((q) => q.id !== playerId);
+      if (this.hostId === playerId) {
+        const h = this.players.find((q) => !q.isBot);
+        this.hostId = h ? h.id : null;
+      }
+      return { ok: true };
+    }
+    // Partida en curso: la IA básica sigue jugando por él.
+    this._makeBot(playerId);
+    return { ok: true };
+  }
+
+  // -------- IA básica --------
+
+  // Actúa por el jugador de turno si es un bot. La usa el servidor con un
+  // pequeño delay para que se sienta natural.
+  botAct() {
+    const turnId = this.currentTurnId();
+    if (!turnId) return { ok: false };
+    const p = this.getPlayer(turnId);
+    if (!p || !p.isBot) return { ok: false };
+
+    if (this.phase === PHASES.BETTING) {
+      // Estimación simple: cuenta muestras y cartas fuertes (1 y 3).
+      const hand = this.hands[turnId] || [];
+      let est = hand.filter((c) => c.suit === this.trumpSuit || c.rank === 1 || c.rank === 3).length;
+      est = Math.max(0, Math.min(this.cardsThisRound, est));
+      const isDealer = this.bettingPos === this.bettingSeq.length - 1;
+      const sumOthers = Object.values(this.bets).reduce((a, b) => a + b, 0);
+      let bet = null;
+      for (let d = 0; d <= this.cardsThisRound && bet === null; d++) {
+        for (const cand of [est - d, est + d]) {
+          if (cand >= 0 && cand <= this.cardsThisRound && E.isValidBet(cand, this.cardsThisRound, sumOthers, isDealer)) {
+            bet = cand; break;
+          }
+        }
+      }
+      return this.placeBet(turnId, bet == null ? 0 : bet);
+    }
+
+    if (this.phase === PHASES.PLAYING && !this.trickPause) {
+      const legal = E.legalCards(this.hands[turnId] || [], this.currentTrick, this.trumpSuit);
+      if (!legal.length) return { ok: false };
+      // Juega la carta legal más barata (evita gastar muestra si puede).
+      const cost = (c) => (c.suit === this.trumpSuit ? 100 : 0) + E.cardStrength(c.rank);
+      legal.sort((a, b) => cost(a) - cost(b));
+      return this.playCard(turnId, legal[0]);
+    }
+    return { ok: false };
   }
 
   addMessage(playerId, text) {
@@ -420,6 +583,7 @@ class Game {
         name: p.name,
         avatar: p.avatar,
         skin: p.skin || 's1',
+        isBot: !!p.isBot,
         connected: p.connected,
         seat: i,
         isDealer: i === this.dealerIndex && this.phase !== PHASES.LOBBY,
@@ -436,6 +600,23 @@ class Game {
       options: this.options,
       trickPause: this.trickPause,
       isHalfway: this.phase === PHASES.ROUND_END && !!this.halfwayJustEnded,
+      turnElapsed: turnId ? this.turnElapsedMs() : 0,
+      slowTurnMs: SLOW_TURN_MS,
+      replaceVote: this.replaceVote ? (() => {
+        const rv = this.replaceVote;
+        const t = this.getPlayer(rv.targetId);
+        const voters = this.eligibleVoters(rv.targetId);
+        return {
+          targetId: rv.targetId,
+          targetName: t ? t.name : '?',
+          yes: voters.filter((id) => rv.votes[id] === true).length,
+          needed: voters.length,
+          youAreTarget: viewerId === rv.targetId,
+          yourVote: rv.votes[viewerId] != null ? rv.votes[viewerId] : null,
+          canVote: viewerId !== rv.targetId && voters.includes(viewerId) && rv.votes[viewerId] == null,
+        };
+      })() : null,
+      lastVoteResult: this.lastVoteResult,
       muestra: this.muestra,
       trumpSuit: this.trumpSuit,
       currentTrick: this.currentTrick.map((p) => ({ playerId: p.playerId, card: p.card })),
@@ -456,4 +637,4 @@ class Game {
   }
 }
 
-module.exports = { Game, PHASES, MAX_PLAYERS };
+module.exports = { Game, PHASES, MAX_PLAYERS, SLOW_TURN_MS };
