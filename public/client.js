@@ -10,7 +10,15 @@ let playerId = localStorage.getItem('raspa_pid');
 if (!playerId) { playerId = uid(); localStorage.setItem('raspa_pid', playerId); }
 
 const AVATARS = ['a01','a02','a03','a04','a05','a06','a07','a08','a09','a10','a11','a12'];
+
+// Tonos de piel elegibles. Los SVG de los avatares usan alguno de los colores
+// "base"; al mostrarlos se reemplaza por el tono elegido por cada jugador.
+const SKINS = { s1: '#ffe0bd', s2: '#f1c79b', s3: '#e0ac69', s4: '#c68642', s5: '#8d5524', s6: '#5c3a21' };
+const SKIN_BASES = ['#ffd9a0', '#ffe0bd', '#f1c79b', '#e8b48a'];
+
 let selectedAvatar = localStorage.getItem('raspa_avatar') || 'a01';
+let selectedSkin = localStorage.getItem('raspa_skin') || 's1';
+if (!SKINS[selectedSkin]) selectedSkin = 's1';
 let myName = localStorage.getItem('raspa_name') || '';
 let currentCode = null;
 let lastState = null;
@@ -24,9 +32,31 @@ const ROUND_COUNTDOWN = 7; // segundos (coincide con AUTO_ADVANCE_MS del servido
 const $ = (id) => document.getElementById(id);
 const screens = ['home','lobby','game','gameover'];
 function show(screen) { screens.forEach((s) => $(s).classList.toggle('active', s === screen)); }
-function cardSrc(card) { return 'cards/' + card.rank + '-' + card.suit + '.svg'; }
-function avatarSrc(a) { return 'avatars/' + a + '.svg'; }
+function cardSrc(card) { return 'cards/' + card.rank + '-' + card.suit + '.png'; }
 function suitName(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+// ---------- Avatares con color de piel ----------
+// Se precargan los SVG y se recolorea la piel con el tono de cada jugador.
+const avatarSvgCache = {};   // 'a01' -> texto del svg
+const avatarUriCache = {};   // 'a01|s3' -> data URI
+AVATARS.forEach((a) => {
+  fetch('avatars/' + a + '.svg').then((r) => r.text()).then((txt) => {
+    avatarSvgCache[a] = txt;
+    if (lastState) render(lastState); else initHome();
+  }).catch(() => {});
+});
+function avatarSrc(a, skin) {
+  skin = SKINS[skin] ? skin : 's1';
+  const key = a + '|' + skin;
+  if (avatarUriCache[key]) return avatarUriCache[key];
+  const svg = avatarSvgCache[a];
+  if (!svg) return 'avatars/' + a + '.svg'; // todavía no cargó: se ve con la piel original
+  let txt = svg;
+  SKIN_BASES.forEach((b) => { txt = txt.split(b).join(SKINS[skin]); });
+  const uri = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(txt)));
+  avatarUriCache[key] = uri;
+  return uri;
+}
 
 fetch('phrases.json').then((r) => r.json()).then((d) => { phrases = d.frases || []; })
   .catch(() => { phrases = ['¡Vamos!','Esa era mía']; });
@@ -69,11 +99,28 @@ updateSoundBtn();
 // ---------- Inicio ----------
 function initHome() {
   $('nameInput').value = myName;
+
+  const skins = $('skinPicker');
+  skins.innerHTML = '';
+  Object.keys(SKINS).forEach((sk) => {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'skin-dot' + (sk === selectedSkin ? ' selected' : '');
+    dot.style.background = SKINS[sk];
+    dot.title = 'Tono de piel';
+    dot.onclick = () => {
+      selectedSkin = sk;
+      localStorage.setItem('raspa_skin', sk);
+      initHome(); // repinta avatares con el nuevo tono
+    };
+    skins.appendChild(dot);
+  });
+
   const picker = $('avatarPicker');
   picker.innerHTML = '';
   AVATARS.forEach((a) => {
     const img = document.createElement('img');
-    img.src = avatarSrc(a);
+    img.src = avatarSrc(a, selectedSkin);
     img.className = a === selectedAvatar ? 'selected' : '';
     img.onclick = () => {
       selectedAvatar = a;
@@ -96,7 +143,7 @@ function getNameOrWarn() {
 $('createBtn').onclick = () => {
   unlockAudio();
   const name = getNameOrWarn(); if (!name) return;
-  socket.emit('create', { name, avatar: selectedAvatar, playerId }, (res) => {
+  socket.emit('create', { name, avatar: selectedAvatar, skin: selectedSkin, playerId }, (res) => {
     if (!res.ok) { $('homeError').textContent = res.error; return; }
     currentCode = res.code;
     localStorage.setItem('raspa_code', res.code);
@@ -108,7 +155,7 @@ $('joinBtn').onclick = () => {
   const name = getNameOrWarn(); if (!name) return;
   const code = $('codeInput').value.trim().toUpperCase();
   if (!code) { $('homeError').textContent = 'Escribí el código de la sala.'; return; }
-  socket.emit('join', { code, name, avatar: selectedAvatar, playerId }, (res) => {
+  socket.emit('join', { code, name, avatar: selectedAvatar, skin: selectedSkin, playerId }, (res) => {
     if (!res.ok) { $('homeError').textContent = res.error; return; }
     currentCode = res.code;
     localStorage.setItem('raspa_code', res.code);
@@ -227,13 +274,20 @@ function renderLobby(s) {
   s.players.forEach((p) => {
     const div = document.createElement('div');
     div.className = 'lobby-player' + (p.id === s.hostId ? ' host' : '');
-    div.innerHTML = '<img src="' + avatarSrc(p.avatar) + '"><div class="pname">' + escapeHtml(p.name) + '</div>' +
+    div.innerHTML = '<img src="' + avatarSrc(p.avatar, p.skin) + '"><div class="pname">' + escapeHtml(p.name) + '</div>' +
       (p.id === s.hostId ? '<span class="host-tag">anfitrión</span>' : '');
     cont.appendChild(div);
   });
   const startBtn = $('startBtn');
   startBtn.classList.toggle('hidden', !s.youAreHost);
   startBtn.disabled = s.players.length < 2;
+
+  // Opción "ida y vuelta": el anfitrión la cambia, el resto la ve.
+  const chk = $('idaVueltaChk');
+  chk.checked = !!(s.options && s.options.idaYVuelta);
+  chk.disabled = !s.youAreHost;
+  chk.onchange = () => socket.emit('setOptions', { idaYVuelta: chk.checked }, () => {});
+
   $('lobbyHint').textContent = s.youAreHost
     ? (s.players.length < 2 ? 'Esperando al menos un primo más...' : 'Listo para empezar.')
     : 'Esperando que el anfitrión empiece...';
@@ -263,7 +317,7 @@ function renderGame(s) {
     div.innerHTML =
       (p.isDealer ? '<span class="badge dealer-badge">reparte</span>' : '') +
       (p.hasBet ? '<span class="badge bet-badge">' + p.bet + '</span>' : '') +
-      '<img class="av" src="' + avatarSrc(p.avatar) + '">' +
+      '<img class="av" src="' + avatarSrc(p.avatar, p.skin) + '">' +
       '<div class="sname">' + escapeHtml(p.name) + '</div>' +
       '<div class="sstats">' + statLine + '</div>' +
       '<span class="score-badge">' + p.score + '</span>';
@@ -276,8 +330,9 @@ function renderGame(s) {
   const winnerId = (!s.currentTrick || !s.currentTrick.length) && s.lastTrick ? s.lastTrick.winnerId : null;
   showTrick.forEach((play) => {
     const pl = s.players.find((x) => x.id === play.playerId);
+    const isTrumpAce = play.card.rank === 1 && play.card.suit === s.trumpSuit;
     const div = document.createElement('div');
-    div.className = 'played' + (play.playerId === winnerId ? ' winner' : '');
+    div.className = 'played' + (play.playerId === winnerId ? ' winner' : '') + (isTrumpAce ? ' trump-ace' : '');
     div.innerHTML = '<img src="' + cardSrc(play.card) + '"><div class="who">' + (pl ? escapeHtml(pl.name) : '') + '</div>';
     trick.appendChild(div);
   });
@@ -287,7 +342,12 @@ function renderGame(s) {
   if (s.phase === 'betting') {
     status.textContent = turnP ? (turnP.id === s.myId ? 'Es tu turno de apostar' : 'Apostando: ' + turnP.name) : '';
   } else if (s.phase === 'playing') {
-    status.textContent = turnP ? (turnP.id === s.myId ? '¡Tu turno! Tirá una carta' : 'Juega: ' + turnP.name) : '';
+    if (s.trickPause && s.lastTrick) {
+      const w = s.players.find((p) => p.id === s.lastTrick.winnerId);
+      status.textContent = w ? ('Mano para ' + w.name + ' 🏅') : '';
+    } else {
+      status.textContent = turnP ? (turnP.id === s.myId ? '¡Tu turno! Tirá una carta' : 'Juega: ' + turnP.name) : '';
+    }
   } else { status.textContent = ''; }
 
   renderHand(s);
@@ -355,6 +415,19 @@ function renderRoundEnd(s) {
       cont.appendChild(row);
     });
   }
+
+  // Fin de la "ida" (modo ida y vuelta): resultado parcial con las posiciones.
+  if (s.isHalfway) {
+    const half = document.createElement('div');
+    half.className = 'halfway-box';
+    let html = '<div class="halfway-title">📊 Resultado parcial — fin de la ida</div>';
+    [...s.players].sort((a, b) => b.score - a.score).forEach((p, i) => {
+      html += '<div class="round-end-row"><span>' + (i + 1) + 'º ' + escapeHtml(p.name) + '</span><span><b>' + p.score + '</b> pts</span></div>';
+    });
+    half.innerHTML = html + '<div class="halfway-note">Ahora se vuelve bajando: ' + s.cardsThisRound + ' → 1</div>';
+    cont.appendChild(half);
+  }
+
   $('nextRoundBtn').classList.toggle('hidden', !s.youAreHost);
   $('roundEndHint').textContent = s.youAreHost ? 'O esperá a que empiece sola.' : 'La próxima ronda empieza sola.';
 }
@@ -384,11 +457,75 @@ function renderGameOver(s) {
   [...s.players].sort((a, b) => b.score - a.score).forEach((p) => {
     const row = document.createElement('div');
     row.className = 'row' + (s.winnerIds.includes(p.id) ? ' win' : '');
-    row.innerHTML = '<img src="' + avatarSrc(p.avatar) + '"><span>' + escapeHtml(p.name) + '</span><span class="pts">' + p.score + '</span>';
+    row.innerHTML = '<img src="' + avatarSrc(p.avatar, p.skin) + '"><span>' + escapeHtml(p.name) + '</span><span class="pts">' + p.score + '</span>';
     cont.appendChild(row);
   });
   $('playAgainBtn').classList.toggle('hidden', !s.youAreHost);
   $('gameoverHint').textContent = s.youAreHost ? '' : 'Esperando al anfitrión...';
+
+  // Festejo: el/los ganadores saltan en el medio con fuegos artificiales.
+  const cel = $('celebration');
+  cel.innerHTML = '';
+  winners.forEach((w, i) => {
+    const img = document.createElement('img');
+    img.src = avatarSrc(w.avatar, w.skin);
+    img.className = 'celebrate-avatar';
+    img.style.animationDelay = (i * 0.15) + 's';
+    cel.appendChild(img);
+  });
+  startFireworks();
+}
+
+// ---------- Fuegos artificiales ----------
+let fwAnim = null;
+function startFireworks() {
+  const canvas = $('fireworks');
+  if (!canvas || fwAnim) return;
+  const ctx = canvas.getContext('2d');
+  const colors = ['#ffd166', '#ef476f', '#06d6a0', '#118ab2', '#f78c6b', '#fff'];
+  let parts = [];
+  let lastBurst = 0;
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function burst() {
+    const x = canvas.width * (0.15 + Math.random() * 0.7);
+    const y = canvas.height * (0.1 + Math.random() * 0.45);
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const n = 40 + Math.floor(Math.random() * 30);
+    for (let i = 0; i < n; i++) {
+      const ang = (Math.PI * 2 * i) / n + Math.random() * 0.2;
+      const sp = 1.5 + Math.random() * 3.5;
+      parts.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 1, color });
+    }
+  }
+
+  function frame(ts) {
+    if (!document.getElementById('gameover').classList.contains('active')) {
+      stopFireworks();
+      return;
+    }
+    if (ts - lastBurst > 700) { burst(); lastBurst = ts; }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    parts.forEach((p) => {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.035; p.life -= 0.012;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    parts = parts.filter((p) => p.life > 0);
+    fwAnim = requestAnimationFrame(frame);
+  }
+  fwAnim = requestAnimationFrame(frame);
+}
+function stopFireworks() {
+  if (fwAnim) { cancelAnimationFrame(fwAnim); fwAnim = null; }
+  const canvas = $('fireworks');
+  if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
 }
 
 function renderScorePanel() {

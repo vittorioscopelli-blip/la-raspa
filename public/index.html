@@ -16,6 +16,9 @@
       <label class="field-label">Tu nombre</label>
       <input id="nameInput" type="text" maxlength="14" placeholder="Ej: Vitto" />
 
+      <label class="field-label">Color de piel</label>
+      <div id="skinPicker" class="skin-picker"></div>
+
       <label class="field-label">Elegí tu avatar</label>
       <div id="avatarPicker" class="avatar-picker"></div>
 
@@ -37,6 +40,10 @@
       <h2>Sala <span id="lobbyCode" class="code-badge"></span></h2>
       <p class="hint">Compartí el código con tus primos para que se unan.</p>
       <div id="lobbyPlayers" class="lobby-players"></div>
+      <label id="idaVueltaRow" class="option-row">
+        <input id="idaVueltaChk" type="checkbox" />
+        <span>Ida y vuelta: al llegar a 7 cartas se vuelve bajando (7, 6, 5... hasta 1)</span>
+      </label>
       <button id="startBtn" class="btn primary" disabled>Empezar partida</button>
       <p id="lobbyHint" class="hint"></p>
       <button id="leaveBtn" class="link-btn">Salir</button>
@@ -104,7 +111,9 @@
 
   <!-- ===================== FIN DE PARTIDA ===================== -->
   <section id="gameover" class="screen">
-    <div class="lobby-card">
+    <canvas id="fireworks"></canvas>
+    <div id="celebration" class="celebration"></div>
+    <div class="lobby-card gameover-card">
       <h2 id="winnerTitle">🏆</h2>
       <div id="finalScores" class="final-scores"></div>
       <button id="playAgainBtn" class="btn primary">Jugar de nuevo</button>
@@ -132,7 +141,8 @@
         <p><b>Orden de las cartas:</b> 1 (la más fuerte), luego 3, Rey, Caballo, Sota, 7, 6, 5, 4, 2.</p>
         <p><b>Triunfo:</b> el palo de la muestra le gana a cualquier otro palo.</p>
         <p><b>Jugar:</b> hay que seguir el palo de salida. Si no tenés, tirás muestra. Si tenés una carta del palo (o muestra) que gana la mano, estás obligado a tirarla: no podés tirar una más baja para perder. Si la mano ya viene cortada y no tenés una muestra más grande, podés tirar cualquier carta.</p>
-        <p><b>Renunció:</b> se puede tirar cualquier carta aunque viole las reglas. Si te das cuenta de que alguien erró, tocá <b>Renunció</b> y elegí al jugador (una vez por ronda). Si acertás, ese jugador pierde 5 puntos y la mano se vuelve a jugar; si te equivocás, igual gastaste tu acusación.</p>
+        <p><b>Renunció:</b> se puede tirar cualquier carta aunque viole las reglas. Renuncia quien: no sigue el palo de salida teniendo; tira una carta menor a la más alta del palo pudiendo superarla (salvo que la mano ya venga cortada con muestra); corta con muestra teniendo el palo de salida; o no corta con muestra (o corta con una menor a la ya jugada) no teniendo el palo, pudiendo. Si notás que alguien erró, tocá <b>Renunció</b> y elegí al jugador (una vez por ronda). La acusación revisa todas las jugadas de la ronda hasta ese momento: si acertás, el infractor pierde 5 puntos y la ronda se repite desde la mano de la infracción (las manos posteriores se anulan); si te equivocás, igual gastaste tu acusación.</p>
+        <p><b>Ida y vuelta (opcional):</b> el anfitrión puede activar en la sala de espera que, al llegar a la ronda de 7 cartas, se siga bajando (7, 6, 5... hasta 1). Al terminar la ronda de 7 se muestra el resultado parcial.</p>
         <p><b>Puntos:</b> cada mano ganada vale 1 punto. Si además cumplís tu apuesta exacta, sumás 5 puntos de bonus. Ej: apostaste 0 e hiciste 1 mano = 1 punto; apostaste 2 e hiciste 2 = 7. Gana quien más puntos suma al final.</p>
       </div>
       <button id="closeRules" class="btn">Entendido</button>
