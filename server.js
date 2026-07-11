@@ -27,6 +27,10 @@ const roundTimers = new Map(); // code -> timeout
 const TRICK_PAUSE_MS = 2000;
 const trickTimers = new Map(); // code -> timeout
 
+// La IA básica juega con un pequeño delay para que se sienta natural.
+const BOT_DELAY_MS = 1200;
+const botTimers = new Map(); // code -> timeout
+
 // --- Límites de seguridad ---
 const MAX_ROOMS = 1000;            // tope de salas simultáneas (anti-abuso de memoria)
 const ROOM_EXPIRY_MS = 30 * 60 * 1000; // borra salas sin nadie conectado tras 30 min
@@ -66,7 +70,17 @@ function broadcast(code) {
   for (const [sid, info] of sockets) {
     if (info.code === code) {
       const s = io.sockets.sockets.get(sid);
-      if (s) s.emit('state', game.viewFor(info.playerId));
+      if (!s) continue;
+      const p = game.getPlayer(info.playerId);
+      if (p && p.isBot) {
+        // Este jugador fue expulsado (votación) o abandonó: se lo desvincula
+        // para que pueda crear o unirse a otra partida.
+        s.emit('expelled', {});
+        s.leave(code);
+        sockets.delete(sid);
+        continue;
+      }
+      s.emit('state', game.viewFor(info.playerId));
     }
   }
 }
@@ -104,9 +118,34 @@ function scheduleTrickFinish(code) {
       g.finishTrick();
       broadcast(code);
       scheduleAutoAdvance(code); // por si la ronda terminó
+      scheduleBotAct(code);      // por si la próxima mano la abre un bot
     }
   }, TRICK_PAUSE_MS);
   trickTimers.set(code, t);
+}
+
+// Si el turno es de un jugador reemplazado por la IA, el servidor juega por él.
+function scheduleBotAct(code) {
+  const game = rooms.get(code);
+  if (!game || botTimers.has(code)) return;
+  // Si no queda ningún humano conectado, no tiene sentido que los bots
+  // sigan jugando solos; la sala se borra sola después de un rato.
+  if (!game.players.some((p) => !p.isBot && p.connected)) return;
+  const turnId = game.currentTurnId();
+  if (!turnId) return;
+  const p = game.getPlayer(turnId);
+  if (!p || !p.isBot) return;
+  const t = setTimeout(() => {
+    botTimers.delete(code);
+    const g = rooms.get(code);
+    if (!g) return;
+    g.botAct();
+    broadcast(code);
+    scheduleTrickFinish(code);
+    scheduleAutoAdvance(code);
+    scheduleBotAct(code); // encadena si el siguiente turno también es de un bot
+  }, BOT_DELAY_MS);
+  botTimers.set(code, t);
 }
 
 function cleanupRoomIfEmpty(code) {
@@ -167,6 +206,9 @@ io.on('connection', (socket) => {
     if (!game || !game.getPlayer(playerId)) {
       return cb && cb({ ok: false, error: 'No se pudo reconectar.' });
     }
+    if (game.getPlayer(playerId).isBot) {
+      return cb && cb({ ok: false, error: 'Ya no estás en esa partida.' });
+    }
     game.setConnected(playerId, true);
     joinRoom(code, playerId);
     cb && cb({ ok: true, code });
@@ -184,10 +226,30 @@ io.on('connection', (socket) => {
     broadcast(info.code);
     scheduleAutoAdvance(info.code);
     scheduleTrickFinish(info.code);
+    scheduleBotAct(info.code);
   }
 
   socket.on('start', (_, cb) => withGame(cb, (g, i) => g.start(i.playerId)));
   socket.on('setOptions', (opts, cb) => withGame(cb, (g, i) => g.setOptions(i.playerId, opts || {})));
+  socket.on('startReplaceVote', ({ targetId }, cb) => withGame(cb, (g, i) => g.startReplaceVote(i.playerId, targetId)));
+  socket.on('voteReplace', ({ yes }, cb) => withGame(cb, (g, i) => g.voteReplace(i.playerId, !!yes)));
+
+  // Abandono voluntario: el jugador se desvincula y la IA sigue por él.
+  socket.on('abandon', (_, cb) => {
+    const info = sockets.get(socket.id);
+    if (!info) return cb && cb({ ok: false, error: 'No estás en una sala.' });
+    const game = rooms.get(info.code);
+    if (!game) return cb && cb({ ok: false, error: 'La sala no existe.' });
+    const res = game.abandon(info.playerId);
+    socket.leave(info.code);
+    sockets.delete(socket.id);
+    cb && cb(res);
+    broadcast(info.code);
+    scheduleAutoAdvance(info.code);
+    scheduleTrickFinish(info.code);
+    scheduleBotAct(info.code);
+    cleanupRoomIfEmpty(info.code);
+  });
   socket.on('bet', ({ bet }, cb) => withGame(cb, (g, i) => g.placeBet(i.playerId, bet)));
   socket.on('play', ({ card }, cb) => withGame(cb, (g, i) => g.playCard(i.playerId, card)));
   socket.on('nextRound', (_, cb) => withGame(cb, (g, i) => g.nextRound(i.playerId)));
@@ -246,6 +308,8 @@ setInterval(() => {
       clearAutoAdvance(code);
       const tt = trickTimers.get(code);
       if (tt) { clearTimeout(tt); trickTimers.delete(code); }
+      const bt = botTimers.get(code);
+      if (bt) { clearTimeout(bt); botTimers.delete(code); }
       rooms.delete(code);
     }
   }
