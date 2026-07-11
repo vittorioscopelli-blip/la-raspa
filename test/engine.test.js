@@ -70,6 +70,12 @@ hand = [C(5, 'copas'), C(7, 'bastos')];
 cur = [{ playerId: 'x', card: C(7, 'espadas') }, { playerId: 'y', card: C(1, 'oros') }];
 eq(E.legalCards(hand, cur, 'oros').map(E.cardId).sort(), ['5-copas', '7-bastos'], 'sin muestra y cortada, cualquier carta');
 
+// Plan de rondas (ida y vuelta)
+eq(E.roundsPlan(2), [1, 2, 3, 4, 5, 6, 7], 'plan normal 2 jugadores: 1..7');
+eq(E.roundsPlan(2, true), [1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1], 'ida y vuelta 2 jugadores: 1..7..1');
+eq(E.roundsPlan(10), [1, 2, 3], 'plan normal 10 jugadores: 1..3');
+eq(E.roundsPlan(10, true), [1, 2, 3, 2, 1], 'ida y vuelta 10 jugadores: 1..3..1');
+
 // Apuesta del repartidor
 eq(E.forbiddenDealerBet(1, 2), 1, 'prohibido = cartas - suma otros');
 ok(!E.isValidBet(1, 2, 1, true), 'repartidor no puede apostar el prohibido');
@@ -125,6 +131,11 @@ ok(g2.playCard('B', C(7, 'oros')).ok, 'B puede jugar 7 de oros aunque sea ilegal
 ok(g2.lastTrick && g2.lastTrick.plays.some((x) => x.playerId === 'B' && x.legal === false), 'la jugada de B quedó marcada como ilegal');
 ok(g2.tricksWon['B'] === 1, 'B ganó la mano con la muestra (antes de acusar)');
 
+// Pausa de fin de mano: nadie puede jugar hasta que el servidor la cierre.
+ok(g2.trickPause === true, 'al resolver la mano arranca la pausa');
+ok(!g2.playCard('B', C(3, 'espadas')).ok, 'no se puede jugar durante la pausa');
+ok(g2.currentTurnId() === null, 'durante la pausa no hay turno');
+
 // Acusación CORRECTA: -5 y se repite la mano.
 let acc = g2.accuse('A', 'B');
 ok(acc.ok, 'acusación procesada');
@@ -145,10 +156,39 @@ ok(acc2.ok && g3.lastAccusation.correct === false, 'acusación incorrecta marcad
 eq(g3.scores['B'], 0, 'B no pierde puntos si jugó bien');
 ok(!g3.accuse('A', 'B').ok, 'igual se consumió la acusación de A');
 
+// Acusación RETROACTIVA: la infracción fue en una mano ANTERIOR de la ronda.
+// Se anulan esa mano y las posteriores, y se repite desde ahí.
+let g4 = makePlayingGame();
+g4.playCard('A', C(1, 'espadas'));
+g4.playCard('B', C(7, 'oros'));      // ilegal: tenía espadas
+ok(g4.finishTrick().ok, 'se cierra la pausa de la mano 1');
+eq(g4.tricksWon['B'], 1, 'B se llevó la mano 1');
+g4.playCard('B', C(3, 'espadas'));   // arranca la mano 2 (B ganó la anterior)
+let acc3 = g4.accuse('A', 'B');      // A se da cuenta recién ahora
+ok(acc3.ok && g4.lastAccusation.correct === true, 'acusación retroactiva correcta');
+eq(g4.scores['B'], -5, 'B pierde 5 puntos');
+eq(g4.tricksWon['B'], 0, 'se anula la mano que B había ganado');
+eq(g4.hands['A'].length, 2, 'A recupera todas sus cartas');
+eq(g4.hands['B'].length, 2, 'B recupera todas sus cartas (incluida la de la mano en curso)');
+eq(g4.roundTricks.length, 0, 'no quedan manos resueltas: se repite desde la infracción');
+eq(g4.currentTurnId(), 'A', 'vuelve a abrir A, que era la mano de la jugada anulada');
+ok(g4.trickPause === false, 'sin pausa pendiente tras la acusación');
+
+// Acusación durante la pausa de fin de mano también funciona.
+let g5 = makePlayingGame();
+g5.playCard('A', C(1, 'espadas'));
+g5.playCard('B', C(7, 'oros'));      // ilegal
+ok(g5.trickPause === true, 'pausa activa');
+let acc4 = g5.accuse('A', 'B');
+ok(acc4.ok && g5.lastAccusation.correct === true, 'se puede acusar durante la pausa');
+eq(g5.tricksWon['B'], 0, 'se anuló la mano de B');
+eq(g5.currentTurnId(), 'A', 'se repite la mano desde A');
+
 // Simulacion de partida completa
-function simulate(numPlayers) {
+function simulate(numPlayers, idaYVuelta) {
   const g = new Game('TEST');
   for (let i = 0; i < numPlayers; i++) g.addPlayer({ id: 'P' + i, name: 'J' + i, avatar: 'a01' });
+  if (idaYVuelta) g.options.idaYVuelta = true;
   ok(g.start('P0').ok, 'partida de ' + numPlayers + ' arranca');
   let guard = 0;
   while (g.phase !== 'gameOver' && guard++ < 5000) {
@@ -160,6 +200,7 @@ function simulate(numPlayers) {
       for (let b = 0; b <= g.cardsThisRound; b++) { if (E.isValidBet(b, g.cardsThisRound, sumOthers, isDealer)) { bet = b; break; } }
       ok(g.placeBet(turn, bet).ok, 'apuesta aceptada');
     } else if (g.phase === 'playing') {
+      if (g.trickPause) { g.finishTrick(); continue; } // simula el timer del servidor
       const turn = g.currentTurnId();
       const legal = E.legalCards(g.hands[turn], g.currentTrick, g.trumpSuit);
       ok(legal.length > 0, 'siempre hay jugada legal');
@@ -169,6 +210,8 @@ function simulate(numPlayers) {
     }
   }
   ok(g.phase === 'gameOver', 'partida de ' + numPlayers + ' termina en gameOver');
+  eq(g.roundHistory.length, E.roundsPlan(numPlayers, !!idaYVuelta).length,
+    'se jugaron todas las rondas (' + (idaYVuelta ? 'ida y vuelta' : 'normal') + ')');
   g.roundHistory.forEach((h) => {
     const totalWon = Object.values(h.results).reduce((a, r) => a + r.won, 0);
     eq(totalWon, h.cards, 'ronda ' + h.round + ': manos ganadas suman ' + h.cards);
@@ -179,6 +222,7 @@ function simulate(numPlayers) {
   return g;
 }
 [2, 3, 4, 5, 7, 10].forEach((n) => simulate(n));
+[2, 3, 10].forEach((n) => simulate(n, true)); // modo ida y vuelta
 
 console.log('\nResultado: ' + pass + ' ok, ' + fail + ' fallos.');
 process.exit(fail ? 1 : 0);
