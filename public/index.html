@@ -57,17 +57,18 @@
         <span id="roundLabel">Ronda</span>
         <span id="trumpInfo" class="trump-info"></span>
       </div>
-      <div class="topbar-actions">
-        <div class="phrase-bar">
-          <button id="phraseToggle" class="btn small">💬 Frase</button>
-          <div id="phraseMenu" class="phrase-menu hidden"></div>
-        </div>
+      <div class="topbar-actions" id="topbarActions">
         <div class="accuse-bar">
           <button id="accuseToggle" class="btn small hidden">⚖️ Renunció</button>
           <div id="accuseMenu" class="phrase-menu hidden"></div>
         </div>
+        <div class="phrase-bar">
+          <button id="phraseToggle" class="btn small">💬 Frase</button>
+          <div id="phraseMenu" class="phrase-menu hidden"></div>
+        </div>
         <button id="soundToggle" class="btn small" title="Sonido del turno">🔊</button>
         <button id="scoreToggle" class="btn small">Puntajes</button>
+        <button id="abandonToggle" class="btn small" title="Abandonar la partida">🚪</button>
       </div>
     </header>
 
@@ -81,6 +82,8 @@
         </div>
         <div id="trick" class="trick"></div>
         <div id="statusMsg" class="status-msg"></div>
+        <button id="slowVoteBtn" class="btn small warn hidden">🐌 Que juegue la IA por él</button>
+        <div id="votePanel" class="vote-panel hidden"></div>
       </div>
     </div>
 
@@ -122,6 +125,18 @@
     </div>
   </section>
 
+  <!-- ===================== ABANDONAR PARTIDA ===================== -->
+  <div id="abandonPanel" class="overlay hidden">
+    <div class="overlay-card abandon-card">
+      <h3>🚪 Abandonar la partida</h3>
+      <p>¿Realmente querés abandonar? Una IA básica va a seguir jugando tus cartas y no vas a poder volver a esta partida.</p>
+      <div class="abandon-actions">
+        <button id="abandonConfirm" class="btn danger">Sí, abandonar</button>
+        <button id="abandonCancel" class="btn">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== PANEL DE PUNTAJES ===================== -->
   <div id="scorePanel" class="overlay hidden">
     <div class="overlay-card">
@@ -143,6 +158,8 @@
         <p><b>Jugar:</b> hay que seguir el palo de salida. Si no tenés, tirás muestra. Si tenés una carta del palo (o muestra) que gana la mano, estás obligado a tirarla: no podés tirar una más baja para perder. Si la mano ya viene cortada y no tenés una muestra más grande, podés tirar cualquier carta.</p>
         <p><b>Renunció:</b> se puede tirar cualquier carta aunque viole las reglas. Renuncia quien: no sigue el palo de salida teniendo; tira una carta menor a la más alta del palo pudiendo superarla (salvo que la mano ya venga cortada con muestra); corta con muestra teniendo el palo de salida; o no corta con muestra (o corta con una menor a la ya jugada) no teniendo el palo, pudiendo. Si notás que alguien erró, tocá <b>Renunció</b> y elegí al jugador (una vez por ronda). La acusación revisa todas las jugadas de la ronda hasta ese momento: si acertás, el infractor pierde 5 puntos y la ronda se repite desde la mano de la infracción (las manos posteriores se anulan); si te equivocás, igual gastaste tu acusación.</p>
         <p><b>Ida y vuelta (opcional):</b> el anfitrión puede activar en la sala de espera que, al llegar a la ronda de 7 cartas, se siga bajando (7, 6, 5... hasta 1). Al terminar la ronda de 7 se muestra el resultado parcial.</p>
+        <p><b>Jugadores lentos:</b> si alguien demora más de 20 segundos en su turno, los demás pueden votar que una IA básica juegue por él. Sólo pasa si la votación es unánime; el reemplazado queda fuera de la partida. Si juega antes de que termine la votación, se cancela.</p>
+        <p><b>Abandonar:</b> con el botón 🚪 podés abandonar la partida (te pide confirmación). La IA sigue jugando tus cartas y vos quedás libre para crear o unirte a otra partida.</p>
         <p><b>Puntos:</b> cada mano ganada vale 1 punto. Si además cumplís tu apuesta exacta, sumás 5 puntos de bonus. Ej: apostaste 0 e hiciste 1 mano = 1 punto; apostaste 2 e hiciste 2 = 7. Gana quien más puntos suma al final.</p>
       </div>
       <button id="closeRules" class="btn">Entendido</button>

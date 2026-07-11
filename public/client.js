@@ -27,6 +27,8 @@ let seenAccusationTs = 0;
 let phrases = [];
 let wasMyTurn = false;
 let lastPhase = null;
+let stateReceivedAt = 0;   // cuándo llegó el último estado (para el reloj de demora)
+let seenVoteResultTs = 0;
 const ROUND_COUNTDOWN = 7; // segundos (coincide con AUTO_ADVANCE_MS del servidor)
 
 const $ = (id) => document.getElementById(id);
@@ -181,6 +183,11 @@ $('scoreToggle').onclick = () => { renderScorePanel(); $('scorePanel').classList
 $('closeScore').onclick = () => $('scorePanel').classList.add('hidden');
 
 // ---------- Frases ----------
+// Mientras el menú de frases está abierto se oculta el botón de Renunció
+// (en celulares en vertical se pisaban y las frases quedaban cortadas).
+function setPhrasesOpen(open) {
+  $('topbarActions').classList.toggle('phrases-open', open);
+}
 $('phraseToggle').onclick = (e) => {
   e.stopPropagation();
   const menu = $('phraseMenu');
@@ -189,12 +196,15 @@ $('phraseToggle').onclick = (e) => {
     phrases.forEach((p) => {
       const b = document.createElement('button');
       b.textContent = p;
-      b.onclick = () => { socket.emit('say', { text: p }, () => {}); menu.classList.add('hidden'); };
+      b.onclick = () => { socket.emit('say', { text: p }, () => {}); menu.classList.add('hidden'); setPhrasesOpen(false); };
       menu.appendChild(b);
     });
     menu.classList.remove('hidden');
+    $('accuseMenu').classList.add('hidden');
+    setPhrasesOpen(true);
   } else {
     menu.classList.add('hidden');
+    setPhrasesOpen(false);
   }
 };
 
@@ -222,8 +232,85 @@ $('accuseToggle').onclick = (e) => {
 };
 
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.phrase-bar')) $('phraseMenu').classList.add('hidden');
+  if (!e.target.closest('.phrase-bar')) { $('phraseMenu').classList.add('hidden'); setPhrasesOpen(false); }
   if (!e.target.closest('.accuse-bar')) $('accuseMenu').classList.add('hidden');
+});
+
+// ---------- Jugador lento: votación de reemplazo por IA ----------
+// El botón aparece cuando el jugador de turno lleva más de 20s sin responder.
+function slowElapsed(s) {
+  return (s.turnElapsed || 0) + (Date.now() - stateReceivedAt);
+}
+function updateSlowButton() {
+  const s = lastState;
+  const btn = $('slowVoteBtn');
+  if (!s) { btn.classList.add('hidden'); return; }
+  const turnP = s.players.find((p) => p.isTurn);
+  const show = (s.phase === 'betting' || s.phase === 'playing') &&
+    turnP && turnP.id !== s.myId && !turnP.isBot &&
+    !s.replaceVote && !s.trickPause &&
+    slowElapsed(s) >= (s.slowTurnMs || 20000);
+  btn.classList.toggle('hidden', !show);
+  if (show) btn.textContent = '🐌 ' + turnP.name + ' demora... ¿que juegue la IA por él?';
+}
+setInterval(updateSlowButton, 1000);
+
+$('slowVoteBtn').onclick = () => {
+  const s = lastState; if (!s) return;
+  const turnP = s.players.find((p) => p.isTurn);
+  if (!turnP) return;
+  socket.emit('startReplaceVote', { targetId: turnP.id }, (res) => { if (!res.ok) flashStatus(res.error); });
+};
+
+function renderVotePanel(s) {
+  const panel = $('votePanel');
+  if (!s.replaceVote || (s.phase !== 'betting' && s.phase !== 'playing')) {
+    panel.classList.add('hidden');
+    return;
+  }
+  const rv = s.replaceVote;
+  panel.classList.remove('hidden');
+  if (rv.youAreTarget) {
+    panel.innerHTML = '<b>⚠️ Están votando que la IA juegue por vos.</b> ¡Jugá ya para cancelar la votación!';
+    return;
+  }
+  let html = '<b>🗳️ ¿La IA reemplaza a ' + escapeHtml(rv.targetName) + '?</b> ' +
+    '<span class="vote-count">(' + rv.yes + '/' + rv.needed + ' a favor, tiene que ser unánime)</span>';
+  if (rv.canVote) {
+    html += '<div class="vote-actions">' +
+      '<button id="voteYes" class="btn small danger">Sí, que juegue la IA</button>' +
+      '<button id="voteNo" class="btn small">No, esperemos</button></div>';
+  } else {
+    html += '<div class="vote-wait">Esperando el resto de los votos...</div>';
+  }
+  panel.innerHTML = html;
+  const yes = $('voteYes'), no = $('voteNo');
+  if (yes) yes.onclick = () => socket.emit('voteReplace', { yes: true }, (r) => { if (!r.ok) flashStatus(r.error); });
+  if (no) no.onclick = () => socket.emit('voteReplace', { yes: false }, (r) => { if (!r.ok) flashStatus(r.error); });
+}
+
+// ---------- Abandonar la partida ----------
+$('abandonToggle').onclick = () => $('abandonPanel').classList.remove('hidden');
+$('abandonCancel').onclick = () => $('abandonPanel').classList.add('hidden');
+$('abandonConfirm').onclick = () => {
+  socket.emit('abandon', {}, () => {});
+  $('abandonPanel').classList.add('hidden');
+  leaveLocal('Abandonaste la partida. Podés crear o unirte a otra cuando quieras.');
+};
+
+// Vuelve a la pantalla de inicio y desvincula esta partida.
+function leaveLocal(msg) {
+  currentCode = null;
+  lastState = null;
+  localStorage.removeItem('raspa_code');
+  stopFireworks();
+  show('home');
+  if (msg) $('homeError').textContent = msg;
+}
+
+// El servidor te desvincula (te reemplazó la IA por votación).
+socket.on('expelled', () => {
+  leaveLocal('Fuiste reemplazado por la IA en la partida anterior (votación de los demás jugadores).');
 });
 
 // ---------- Reconexión ----------
@@ -238,7 +325,17 @@ socket.on('connect', () => {
 socket.on('state', (state) => {
   lastState = state;
   currentCode = state.code;
+  stateReceivedAt = Date.now();
   render(state);
+  updateSlowButton();
+
+  // Resultado de la votación de reemplazo
+  if (state.lastVoteResult && state.lastVoteResult.ts > seenVoteResultTs) {
+    seenVoteResultTs = state.lastVoteResult.ts;
+    showBubble('', state.lastVoteResult.success
+      ? '🤖 ' + state.lastVoteResult.targetName + ' fue reemplazado por la IA (votación unánime).'
+      : '🗳️ La votación para reemplazar a ' + state.lastVoteResult.targetName + ' no fue unánime: sigue jugando.');
+  }
 
   // Sonido cuando pasa a ser mi turno
   const myTurn = state.turnId === state.myId && (state.phase === 'betting' || state.phase === 'playing');
@@ -310,7 +407,7 @@ function renderGame(s) {
   seats.innerHTML = '';
   s.players.forEach((p) => {
     const div = document.createElement('div');
-    div.className = 'seat' + (p.isTurn ? ' turn' : '') + (p.connected ? '' : ' disconnected');
+    div.className = 'seat' + (p.isTurn ? ' turn' : '') + (p.connected || p.isBot ? '' : ' disconnected') + (p.isBot ? ' bot' : '');
     div.dataset.pid = p.id;
     const betTxt = p.hasBet ? ('apostó ' + p.bet) : 'pensando...';
     const statLine = (s.phase === 'playing' || s.phase === 'roundEnd') ? ('manos: ' + p.tricksWon) : betTxt;
@@ -318,7 +415,7 @@ function renderGame(s) {
       (p.isDealer ? '<span class="badge dealer-badge">reparte</span>' : '') +
       (p.hasBet ? '<span class="badge bet-badge">' + p.bet + '</span>' : '') +
       '<img class="av" src="' + avatarSrc(p.avatar, p.skin) + '">' +
-      '<div class="sname">' + escapeHtml(p.name) + '</div>' +
+      '<div class="sname">' + (p.isBot ? '🤖 ' : '') + escapeHtml(p.name) + '</div>' +
       '<div class="sstats">' + statLine + '</div>' +
       '<span class="score-badge">' + p.score + '</span>';
     seats.appendChild(div);
@@ -352,6 +449,7 @@ function renderGame(s) {
 
   renderHand(s);
   renderBetPanel(s);
+  renderVotePanel(s);
   $('roundEndPanel').classList.toggle('hidden', s.phase !== 'roundEnd');
   if (s.phase === 'roundEnd') renderRoundEnd(s);
   renderBubbles(s);

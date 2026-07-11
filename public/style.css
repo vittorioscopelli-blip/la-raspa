@@ -37,6 +37,8 @@ body {
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn.primary { background: var(--accent); color: #fff; border-color: #7b1113; }
 .btn.small { padding: 6px 12px; font-size: 14px; }
+.btn.danger { background: var(--accent); color: #fff; border-color: #7b1113; }
+.btn.warn { background: #fff3d6; border-color: #d99a1b; }
 .link-btn { background: none; border: none; color: var(--gold); text-decoration: underline; cursor: pointer; margin-top: 12px; font-size: 14px; }
 
 /* ---------- Inicio ---------- */
@@ -114,6 +116,7 @@ input[type=text] {
 }
 .seat.turn { border-color: var(--gold); box-shadow: 0 0 14px var(--gold); }
 .seat.disconnected { opacity: .5; }
+.seat.bot { opacity: .75; border-style: dashed; border-color: #999; }
 .seat img.av { width: 40px; height: 40px; border-radius: 50%; }
 .seat .sname { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seat .sstats { font-size: 11px; color: #444; }
@@ -148,6 +151,21 @@ input[type=text] {
 }
 .trick .played .who { color: #fff; font-size: 11px; margin-top: 2px; }
 .status-msg { color: var(--cream); font-weight: 600; text-align: center; min-height: 22px; }
+
+/* ---------- Votación de reemplazo por IA ---------- */
+.vote-panel {
+  background: rgba(255,255,255,.97); border: 2px solid #d99a1b; border-radius: 12px;
+  padding: 10px 14px; max-width: 420px; text-align: center; font-size: 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.4);
+}
+.vote-panel .vote-count { color: #666; font-size: 12px; display: block; margin-top: 2px; }
+.vote-panel .vote-actions { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+.vote-panel .vote-wait { color: #666; font-size: 13px; margin-top: 6px; }
+
+/* ---------- Abandonar ---------- */
+.abandon-card { text-align: center; }
+.abandon-card p { margin: 10px 0 16px; line-height: 1.5; }
+.abandon-actions { display: flex; gap: 10px; justify-content: center; }
 
 /* ---------- Dock inferior (panel + mano apilados) ---------- */
 .bottom-dock {
@@ -249,9 +267,15 @@ input[type=text] {
 #fireworks {
   position: fixed; inset: 0; z-index: 5; pointer-events: none;
 }
-.gameover-card { position: relative; z-index: 10; }
+/* Tabla de resultados semitransparente para que se vean los fuegos detrás */
+.gameover-card {
+  position: relative; z-index: 10;
+  background: rgba(255, 255, 255, .74);
+  backdrop-filter: blur(2px);
+}
+/* El festejo va DEBAJO de la tabla, siempre visible */
 .celebration {
-  position: fixed; top: 6vh; left: 0; right: 0; z-index: 8;
+  position: fixed; bottom: 4vh; left: 0; right: 0; z-index: 12;
   display: flex; justify-content: center; gap: 18px; pointer-events: none;
 }
 .celebrate-avatar {
@@ -267,8 +291,17 @@ input[type=text] {
   70% { transform: translateY(-14px) rotate(-3deg); }
 }
 
+/* Con el menú de frases abierto se oculta el botón de Renunció */
+.topbar-actions.phrases-open .accuse-bar { display: none; }
+
 @media (max-width: 520px) {
   .myhand img { width: 64px; }
   .seat { width: 80px; }
   h1 { font-size: 34px; }
+  /* En celular vertical los menús ocupan el ancho de la pantalla,
+     así las frases no quedan cortadas. */
+  .phrase-menu {
+    position: fixed; top: 54px; left: 8px; right: 8px;
+    width: auto; max-width: none; max-height: 55vh;
+  }
 }
