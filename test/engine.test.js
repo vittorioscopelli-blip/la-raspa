@@ -184,6 +184,89 @@ ok(acc4.ok && g5.lastAccusation.correct === true, 'se puede acusar durante la pa
 eq(g5.tricksWon['B'], 0, 'se anuló la mano de B');
 eq(g5.currentTurnId(), 'A', 'se repite la mano desde A');
 
+// ============================================================
+//  Votación de reemplazo por IA y abandono
+// ============================================================
+function makeVoteGame() {
+  const g = new Game('V');
+  g.addPlayer({ id: 'A', name: 'Ana', avatar: 'a01' });
+  g.addPlayer({ id: 'B', name: 'Beto', avatar: 'a01' });
+  g.addPlayer({ id: 'C', name: 'Cata', avatar: 'a01' });
+  g.start('A');
+  return g;
+}
+
+// Votación unánime: el lento queda reemplazado por la IA.
+let gv = makeVoteGame();
+let slowId = gv.currentTurnId();
+let others = gv.order.filter((id) => id !== slowId);
+ok(!gv.startReplaceVote(others[0], slowId).ok, 'no se puede votar antes de los 20 segundos');
+gv.turnStartedAt = Date.now() - 21000; // simulamos la demora
+ok(!gv.startReplaceVote(slowId, slowId).ok, 'el lento no puede iniciar su propia votación');
+ok(gv.startReplaceVote(others[0], slowId).ok, 'arranca la votación');
+ok(gv.replaceVote && gv.replaceVote.targetId === slowId, 'votación en curso contra el lento');
+ok(gv.voteReplace(others[1], true).ok, 'vota el segundo');
+ok(gv.replaceVote === null, 'votación cerrada (era unánime)');
+ok(gv.getPlayer(slowId).isBot === true, 'el lento quedó reemplazado por la IA');
+ok(gv.lastVoteResult && gv.lastVoteResult.success === true, 'resultado registrado');
+ok(!gv.addPlayer({ id: slowId, name: 'Ana', avatar: 'a01' }).ok, 'el expulsado no puede volver');
+
+// El bot juega solo hasta terminar la partida.
+let guardV = 0;
+while (gv.phase !== 'gameOver' && guardV++ < 5000) {
+  if (gv.phase === 'roundEnd') { gv.advanceRound(); continue; }
+  if (gv.trickPause) { gv.finishTrick(); continue; }
+  const turn = gv.currentTurnId();
+  if (!turn) break;
+  if (gv.getPlayer(turn).isBot) { ok(gv.botAct().ok, 'el bot actúa'); continue; }
+  if (gv.phase === 'betting') {
+    const isDealer = gv.bettingPos === gv.bettingSeq.length - 1;
+    const sumOthers = Object.values(gv.bets).reduce((a, b) => a + b, 0);
+    for (let b = 0; b <= gv.cardsThisRound; b++) { if (E.isValidBet(b, gv.cardsThisRound, sumOthers, isDealer)) { gv.placeBet(turn, b); break; } }
+  } else if (gv.phase === 'playing') {
+    gv.playCard(turn, E.legalCards(gv.hands[turn], gv.currentTrick, gv.trumpSuit)[0]);
+  }
+}
+ok(gv.phase === 'gameOver', 'la partida con bot termina bien');
+
+// Votación NO unánime: no pasa nada.
+let gn = makeVoteGame();
+slowId = gn.currentTurnId();
+others = gn.order.filter((id) => id !== slowId);
+gn.turnStartedAt = Date.now() - 21000;
+ok(gn.startReplaceVote(others[0], slowId).ok, 'arranca la segunda votación');
+ok(gn.voteReplace(others[1], false).ok, 'uno vota en contra');
+ok(gn.replaceVote === null, 'la votación se canceló');
+ok(!gn.getPlayer(slowId).isBot, 'el jugador sigue en la partida');
+ok(gn.lastVoteResult && gn.lastVoteResult.success === false, 'quedó registrado que no fue unánime');
+
+// Si el lento juega antes de que termine la votación, se cancela.
+let gc = makeVoteGame();
+slowId = gc.currentTurnId();
+others = gc.order.filter((id) => id !== slowId);
+gc.turnStartedAt = Date.now() - 21000;
+gc.startReplaceVote(others[0], slowId);
+ok(gc.replaceVote !== null, 'votación en curso');
+gc.placeBet(slowId, 0);
+ok(gc.replaceVote === null, 'al responder el acusado, la votación se cancela');
+ok(!gc.getPlayer(slowId).isBot, 'no fue reemplazado');
+
+// Abandono voluntario en plena partida: la IA sigue por él.
+let ga = makeVoteGame();
+const leaver = ga.hostId;
+ok(ga.abandon(leaver).ok, 'el anfitrión abandona');
+ok(ga.getPlayer(leaver).isBot === true, 'quedó como bot');
+ok(ga.hostId !== leaver && ga.hostId !== null, 'el anfitrión pasó a otro humano');
+ok(!ga.abandon('ZZZ').ok, 'no puede abandonar quien no está');
+
+// Abandono en el lobby: se lo quita del todo.
+let gl = new Game('L');
+gl.addPlayer({ id: 'A', name: 'Ana', avatar: 'a01' });
+gl.addPlayer({ id: 'B', name: 'Beto', avatar: 'a01' });
+ok(gl.abandon('A').ok, 'abandona en el lobby');
+eq(gl.players.length, 1, 'quedó fuera de la sala');
+eq(gl.hostId, 'B', 'el otro pasó a ser anfitrión');
+
 // Simulacion de partida completa
 function simulate(numPlayers, idaYVuelta) {
   const g = new Game('TEST');
