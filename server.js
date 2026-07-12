@@ -256,6 +256,21 @@ io.on('connection', (socket) => {
   socket.on('playAgain', (_, cb) => withGame(cb, (g, i) => g.playAgain(i.playerId)));
   socket.on('accuse', ({ accusedId }, cb) => withGame(cb, (g, i) => g.accuse(i.playerId, accusedId)));
 
+  // El ganador tira cuetes artificiales: se retransmite a toda la sala.
+  socket.on('fireworks', (_, cb) => {
+    const info = sockets.get(socket.id);
+    if (!info) return;
+    const game = rooms.get(info.code);
+    if (!game) return;
+    if (game.phase !== 'gameOver') return; // sólo al final de la partida
+    if (!(game.winnerIds || []).includes(info.playerId)) return; // sólo el ganador
+    const now = Date.now();
+    if (socket.data.lastFw && now - socket.data.lastFw < 100) return; // anti-spam suave
+    socket.data.lastFw = now;
+    io.to(info.code).emit('fireworks', {});
+    cb && cb({ ok: true });
+  });
+
   socket.on('say', ({ text }, cb) => {
     const info = sockets.get(socket.id);
     if (!info) return;
