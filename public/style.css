@@ -18,6 +18,14 @@ body {
   overflow-x: hidden;
 }
 
+/* ---------- Fondos de mesa elegibles (botón 🎨) ---------- */
+body.bg-azul { background: radial-gradient(circle at 50% 20%, #2a7fb8, #14577f 55%, #0c3a57); }
+body.bg-azul .bottom-dock { background: linear-gradient(to top, rgba(7,42,66,.96), rgba(7,42,66,.75) 70%, transparent); }
+body.bg-bordo { background: radial-gradient(circle at 50% 20%, #b8474f, #7d232b 55%, #541418); }
+body.bg-bordo .bottom-dock { background: linear-gradient(to top, rgba(62,15,19,.96), rgba(62,15,19,.75) 70%, transparent); }
+body.bg-noche { background: radial-gradient(circle at 50% 20%, #4a4f73, #2b2e49 55%, #181a30); }
+body.bg-noche .bottom-dock { background: linear-gradient(to top, rgba(18,20,38,.96), rgba(18,20,38,.75) 70%, transparent); }
+
 .screen { display: none; min-height: 100vh; }
 .screen.active { display: block; }
 
@@ -104,7 +112,7 @@ input[type=text] {
   padding: 10px 16px; background: rgba(0,0,0,.25); color: var(--cream);
   position: relative; z-index: 35;
 }
-.topbar-actions { display: flex; gap: 8px; align-items: center; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .round-info { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
 #roundLabel { font-weight: 700; }
 .trump-info { font-size: 13px; opacity: .9; }
@@ -275,21 +283,41 @@ input[type=text] {
 }
 /* El festejo va DEBAJO de la tabla, siempre visible */
 .celebration {
-  position: fixed; bottom: 4vh; left: 0; right: 0; z-index: 12;
-  display: flex; justify-content: center; gap: 18px; pointer-events: none;
+  position: fixed; bottom: 3vh; left: 0; right: 0; z-index: 12;
+  display: flex; justify-content: center; gap: 22px; pointer-events: none;
 }
-.celebrate-avatar {
-  width: 110px; height: 110px; border-radius: 50%;
-  border: 4px solid var(--gold); background: #fff;
-  box-shadow: 0 0 30px rgba(232,196,106,.9);
+.celebrate-figure {
+  display: flex; flex-direction: column; align-items: center;
   animation: celebrateJump 0.8s ease-in-out infinite;
 }
+.celebrate-name {
+  font-size: 30px; font-weight: 800; font-family: Georgia, serif;
+  color: var(--gold);
+  text-shadow: 0 2px 0 #7b1113, 0 0 18px rgba(232,196,106,.9), 0 3px 8px rgba(0,0,0,.6);
+  margin-bottom: 2px; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.celebrate-crown { font-size: 42px; line-height: 1; margin-bottom: -16px; z-index: 3; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+.celebrate-avatar {
+  width: 104px; height: 104px; border-radius: 50%;
+  border: 4px solid var(--gold); background: #fff;
+  box-shadow: 0 0 30px rgba(232,196,106,.9);
+  z-index: 2;
+}
+.celebrate-body { margin-top: -14px; z-index: 1; filter: drop-shadow(0 4px 6px rgba(0,0,0,.4)); }
 @keyframes celebrateJump {
   0%, 100% { transform: translateY(0) rotate(-4deg); }
   30% { transform: translateY(-38px) rotate(4deg) scale(1.06); }
   55% { transform: translateY(0) rotate(0deg); }
   70% { transform: translateY(-14px) rotate(-3deg); }
 }
+
+/* Botón de cuetes del ganador */
+.btn.cuetes {
+  background: linear-gradient(135deg, #ffd166, #ef476f);
+  border-color: #7b1113; color: #fff; font-weight: 800;
+  display: block; margin: 0 auto 10px;
+}
+.btn.cuetes:active { transform: scale(.95); }
 
 /* Con el menú de frases abierto se oculta el botón de Renunció */
 .topbar-actions.phrases-open .accuse-bar { display: none; }

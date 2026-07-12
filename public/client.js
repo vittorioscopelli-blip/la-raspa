@@ -561,52 +561,77 @@ function renderGameOver(s) {
   $('playAgainBtn').classList.toggle('hidden', !s.youAreHost);
   $('gameoverHint').textContent = s.youAreHost ? '' : 'Esperando al anfitrión...';
 
-  // Festejo: el/los ganadores saltan en el medio con fuegos artificiales.
+  // Festejo: el/los ganadores saltan con corona, cuerpo y su nombre en grande.
   const cel = $('celebration');
   cel.innerHTML = '';
   winners.forEach((w, i) => {
-    const img = document.createElement('img');
-    img.src = avatarSrc(w.avatar, w.skin);
-    img.className = 'celebrate-avatar';
-    img.style.animationDelay = (i * 0.15) + 's';
-    cel.appendChild(img);
+    const fig = document.createElement('div');
+    fig.className = 'celebrate-figure';
+    fig.style.animationDelay = (i * 0.15) + 's';
+    fig.innerHTML =
+      '<div class="celebrate-name">' + escapeHtml(w.name) + '</div>' +
+      '<div class="celebrate-crown">👑</div>' +
+      '<img class="celebrate-avatar" src="' + avatarSrc(w.avatar, w.skin) + '">' +
+      celebrateBodySvg(SKINS[w.skin] || SKINS.s1);
+    cel.appendChild(fig);
   });
-  startFireworks();
+
+  // Botón de cuetes: sólo lo ve el ganador. Cada toque tira más cuetes
+  // y los ven todos los jugadores. No hay fuegos automáticos.
+  $('cuetesBtn').classList.toggle('hidden', !s.winnerIds.includes(s.myId));
+  startFireworks(); // arranca sólo el lienzo/animación, sin cuetes
+}
+
+// Cuerpo festejando (brazos arriba) con las manos del color de piel elegido.
+function celebrateBodySvg(skinHex) {
+  return '<svg class="celebrate-body" viewBox="0 0 120 92" width="120" height="92" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M32,44 Q18,26 13,10" stroke="' + skinHex + '" stroke-width="9" fill="none" stroke-linecap="round"/>' +
+    '<path d="M88,44 Q102,26 107,10" stroke="' + skinHex + '" stroke-width="9" fill="none" stroke-linecap="round"/>' +
+    '<circle cx="13" cy="9" r="7" fill="' + skinHex + '"/>' +
+    '<circle cx="107" cy="9" r="7" fill="' + skinHex + '"/>' +
+    '<path d="M38,36 h44 l7,40 a9,9 0 0 1 -9,9 h-40 a9,9 0 0 1 -9,-9 Z" fill="#c0392b" stroke="#7b1113" stroke-width="2.5"/>' +
+    '<path d="M60,36 v49" stroke="#7b1113" stroke-width="2.5"/>' +
+    '<circle cx="60" cy="50" r="2.4" fill="#e8c46a"/>' +
+    '<circle cx="60" cy="62" r="2.4" fill="#e8c46a"/>' +
+    '<circle cx="60" cy="74" r="2.4" fill="#e8c46a"/>' +
+    '</svg>';
 }
 
 // ---------- Fuegos artificiales ----------
+// No hay cuetes automáticos: sólo salen cuando el GANADOR toca el botón
+// 🎆 (evento 'fireworks' del servidor, lo ven todos). Cuanto más toca, más cuetes.
 let fwAnim = null;
+let fwParts = [];
+function fwBurst() {
+  const canvas = $('fireworks');
+  if (!canvas) return;
+  const colors = ['#ffd166', '#ef476f', '#06d6a0', '#118ab2', '#f78c6b', '#fff'];
+  const x = canvas.width * (0.1 + Math.random() * 0.8);
+  const y = canvas.height * (0.08 + Math.random() * 0.5);
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  const n = 40 + Math.floor(Math.random() * 30);
+  for (let i = 0; i < n; i++) {
+    const ang = (Math.PI * 2 * i) / n + Math.random() * 0.2;
+    const sp = 1.5 + Math.random() * 3.5;
+    fwParts.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 1, color });
+  }
+}
+
 function startFireworks() {
   const canvas = $('fireworks');
   if (!canvas || fwAnim) return;
   const ctx = canvas.getContext('2d');
-  const colors = ['#ffd166', '#ef476f', '#06d6a0', '#118ab2', '#f78c6b', '#fff'];
-  let parts = [];
-  let lastBurst = 0;
   function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
   resize();
   window.addEventListener('resize', resize);
 
-  function burst() {
-    const x = canvas.width * (0.15 + Math.random() * 0.7);
-    const y = canvas.height * (0.1 + Math.random() * 0.45);
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const n = 40 + Math.floor(Math.random() * 30);
-    for (let i = 0; i < n; i++) {
-      const ang = (Math.PI * 2 * i) / n + Math.random() * 0.2;
-      const sp = 1.5 + Math.random() * 3.5;
-      parts.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 1, color });
-    }
-  }
-
-  function frame(ts) {
+  function frame() {
     if (!document.getElementById('gameover').classList.contains('active')) {
       stopFireworks();
       return;
     }
-    if (ts - lastBurst > 700) { burst(); lastBurst = ts; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    parts.forEach((p) => {
+    fwParts.forEach((p) => {
       p.x += p.vx; p.y += p.vy; p.vy += 0.035; p.life -= 0.012;
       ctx.globalAlpha = Math.max(0, p.life);
       ctx.fillStyle = p.color;
@@ -615,16 +640,47 @@ function startFireworks() {
       ctx.fill();
     });
     ctx.globalAlpha = 1;
-    parts = parts.filter((p) => p.life > 0);
+    fwParts = fwParts.filter((p) => p.life > 0);
     fwAnim = requestAnimationFrame(frame);
   }
   fwAnim = requestAnimationFrame(frame);
 }
 function stopFireworks() {
   if (fwAnim) { cancelAnimationFrame(fwAnim); fwAnim = null; }
+  fwParts = [];
   const canvas = $('fireworks');
   if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
 }
+
+// El ganador tira cuetes; el servidor se los muestra a todos.
+$('cuetesBtn').onclick = () => socket.emit('fireworks', {}, () => {});
+socket.on('fireworks', () => {
+  if (!document.getElementById('gameover').classList.contains('active')) return;
+  startFireworks();
+  const n = 2 + Math.floor(Math.random() * 2); // cada toque, 2-3 cuetes
+  for (let i = 0; i < n; i++) setTimeout(fwBurst, i * 130);
+});
+
+// ---------- Fondo de mesa elegible ----------
+const BGS = [
+  { id: 'verde', name: 'Paño verde' },
+  { id: 'azul', name: 'Paño azul' },
+  { id: 'bordo', name: 'Paño bordó' },
+  { id: 'noche', name: 'Mesa nocturna' },
+];
+let bgIdx = Math.max(0, BGS.findIndex((b) => b.id === (localStorage.getItem('raspa_bg') || 'verde')));
+function applyBg() {
+  BGS.forEach((b) => document.body.classList.remove('bg-' + b.id));
+  const bg = BGS[bgIdx];
+  if (bg.id !== 'verde') document.body.classList.add('bg-' + bg.id);
+  localStorage.setItem('raspa_bg', bg.id);
+}
+$('bgToggle').onclick = () => {
+  bgIdx = (bgIdx + 1) % BGS.length;
+  applyBg();
+  showBubble('', '🎨 Fondo: ' + BGS[bgIdx].name);
+};
+applyBg();
 
 function renderScorePanel() {
   const s = lastState; if (!s) return;
