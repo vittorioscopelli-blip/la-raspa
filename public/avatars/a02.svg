@@ -3,9 +3,13 @@
   <circle cx="50" cy="92" r="34" fill="#ffe0bd"/>
   <circle cx="50" cy="50" r="26" fill="#ffe0bd"/>
   <path d="M24,46 a26,26 0 0 1 52,0 q-26,-18 -52,0 Z" fill="#2b2b2b"/>
-  
-  <circle cx="40" cy="50" r="3.2" fill="#2b2b2b"/>
-  <circle cx="60" cy="50" r="3.2" fill="#2b2b2b"/>
-  <path d="M42,62 q8,7 16,0" stroke="#a0522d" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-  
+  <!-- lentes facheros -->
+  <g>
+    <path d="M24,46 h52" stroke="#111" stroke-width="3" stroke-linecap="round"/>
+    <path d="M31,46 h16 l-2,10 a5,5 0 0 1 -5,4 h-4 a5,5 0 0 1 -5,-4 Z" fill="#14181f"/>
+    <path d="M53,46 h16 l-2,10 a5,5 0 0 1 -5,4 h-4 a5,5 0 0 1 -5,-4 Z" fill="#14181f"/>
+    <path d="M34,49 l4,4" stroke="#5b6b7d" stroke-width="2" stroke-linecap="round"/>
+    <path d="M56,49 l4,4" stroke="#5b6b7d" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <path d="M42,64 q8,7 16,0" stroke="#a0522d" stroke-width="2.5" fill="none" stroke-linecap="round"/>
 </svg>
